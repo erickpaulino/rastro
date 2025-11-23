@@ -21,6 +21,25 @@ const nextDayBtn      = document.getElementById('next-day');
 const summaryBox      = document.getElementById('summary');
 const segmentsListBox = document.getElementById('segments-list');
 const toggleRaw       = document.getElementById('toggle-rawsignals');
+const timelinePanel   = document.getElementById('timeline-panel');
+const panelHandle     = document.getElementById('panel-drag-handle');
+
+const mobileSheet = {
+  enabled: false,
+  dragging: false,
+  state: 'expanded',
+  bounds: { max: 0 },
+  startY: 0,
+  startOffset: 0,
+  lastOffset: 0,
+  pointerId: null,
+  pointerTarget: null,
+  mq: null
+};
+
+const MOBILE_BREAKPOINT = window.matchMedia
+  ? window.matchMedia('(max-width: 768px)')
+  : null;
 
 // ---------------------------------------------------------------------------
 // Inicialização
@@ -29,6 +48,7 @@ const toggleRaw       = document.getElementById('toggle-rawsignals');
 window.addEventListener('DOMContentLoaded', () => {
   initMap();
   bindUI();
+  initMobilePanelSheet();
   loadDaysList();
 });
 
@@ -65,6 +85,181 @@ function bindUI() {
 
   // exposto para o import.js recarregar a lista depois de importar
   window.loadDaysList = loadDaysList;
+}
+
+// ---------------------------------------------------------------------------
+// Painel móvel (bottom sheet) para mobile
+// ---------------------------------------------------------------------------
+
+function initMobilePanelSheet() {
+  if (!timelinePanel || !panelHandle || !MOBILE_BREAKPOINT) {
+    return;
+  }
+
+  mobileSheet.mq = MOBILE_BREAKPOINT;
+  MOBILE_BREAKPOINT.addEventListener
+    ? MOBILE_BREAKPOINT.addEventListener('change', handleSheetBreakpointChange)
+    : MOBILE_BREAKPOINT.addListener(handleSheetBreakpointChange);
+
+  handleSheetBreakpointChange(MOBILE_BREAKPOINT);
+
+  const dragOrigins = [
+    panelHandle,
+    timelinePanel.querySelector('.panel-header')
+  ];
+  dragOrigins.forEach(origin => {
+    if (!origin) return;
+    origin.addEventListener('pointerdown', onSheetPointerDown);
+  });
+
+  panelHandle.addEventListener('click', () => {
+    if (!mobileSheet.enabled || mobileSheet.dragging) return;
+    toggleSheetState();
+  });
+
+  window.addEventListener('resize', () => {
+    if (mobileSheet.enabled) {
+      calculateSheetBounds();
+      snapSheetToState();
+    }
+  });
+}
+
+function handleSheetBreakpointChange(evt) {
+  const isMobile = !!evt.matches;
+  mobileSheet.enabled = isMobile;
+  if (!timelinePanel) return;
+
+  timelinePanel.classList.toggle('mobile-sheet', isMobile);
+
+  if (!isMobile) {
+    timelinePanel.style.setProperty('--panel-offset-y', '0px');
+    mobileSheet.state = 'expanded';
+    timelinePanel.classList.remove('no-transition', 'dragging');
+    return;
+  }
+
+  calculateSheetBounds();
+  snapSheetToState();
+}
+
+function calculateSheetBounds() {
+  if (!timelinePanel) return;
+  const panelHeight = timelinePanel.offsetHeight || window.innerHeight;
+  const collapsedHeight = getCollapsedHeight();
+  const maxOffset = Math.max(0, panelHeight - collapsedHeight);
+  mobileSheet.bounds.max = maxOffset;
+}
+
+function getCollapsedHeight() {
+  if (!timelinePanel) return 0;
+  const handleHeight = panelHandle ? panelHandle.offsetHeight : 0;
+  const header = timelinePanel.querySelector('.panel-header');
+  const controls = timelinePanel.querySelector('.panel-controls');
+
+  let total = 16 + handleHeight;
+  if (header) total += header.offsetHeight;
+  if (controls) total += controls.offsetHeight;
+  total += 24; // espaço inferior
+
+  const panelHeight = timelinePanel.offsetHeight || window.innerHeight;
+  const maxAvailable = Math.max(120, panelHeight - 80);
+  return Math.min(maxAvailable, total);
+}
+
+function onSheetPointerDown(evt) {
+  if (!mobileSheet.enabled || evt.pointerType === 'mouse' && window.innerWidth > 768) {
+    return;
+  }
+  if (evt.currentTarget !== panelHandle && isPointerOnInteractive(evt)) {
+    return;
+  }
+  evt.preventDefault();
+  mobileSheet.dragging = true;
+  mobileSheet.startY = evt.clientY;
+  mobileSheet.startOffset = getCurrentSheetOffset();
+  mobileSheet.pointerId = evt.pointerId;
+  mobileSheet.pointerTarget = evt.currentTarget;
+
+  if (mobileSheet.pointerTarget && mobileSheet.pointerId != null &&
+      mobileSheet.pointerTarget.setPointerCapture) {
+    mobileSheet.pointerTarget.setPointerCapture(mobileSheet.pointerId);
+  }
+
+  timelinePanel.classList.add('dragging', 'no-transition');
+  window.addEventListener('pointermove', onSheetPointerMove);
+  window.addEventListener('pointerup', onSheetPointerUp);
+  window.addEventListener('pointercancel', onSheetPointerUp);
+}
+
+function onSheetPointerMove(evt) {
+  if (!mobileSheet.dragging) return;
+  evt.preventDefault();
+  const delta = evt.clientY - mobileSheet.startY;
+  const next = mobileSheet.startOffset + delta;
+  setSheetOffset(next, false);
+}
+
+function onSheetPointerUp(evt) {
+  if (!mobileSheet.dragging) return;
+  if (mobileSheet.pointerTarget && mobileSheet.pointerId != null &&
+      mobileSheet.pointerTarget.releasePointerCapture) {
+    mobileSheet.pointerTarget.releasePointerCapture(mobileSheet.pointerId);
+  }
+
+  window.removeEventListener('pointermove', onSheetPointerMove);
+  window.removeEventListener('pointerup', onSheetPointerUp);
+  window.removeEventListener('pointercancel', onSheetPointerUp);
+
+  timelinePanel.classList.remove('dragging', 'no-transition');
+
+  mobileSheet.dragging = false;
+  mobileSheet.pointerTarget = null;
+  mobileSheet.pointerId = null;
+
+  const halfway = mobileSheet.bounds.max * 0.5;
+  mobileSheet.state = mobileSheet.lastOffset > halfway ? 'collapsed' : 'expanded';
+  snapSheetToState();
+}
+
+function setSheetOffset(value, animate = true) {
+  if (!timelinePanel) return;
+  const clamped = Math.min(
+    Math.max(0, value),
+    mobileSheet.bounds.max
+  );
+  mobileSheet.lastOffset = clamped;
+  timelinePanel.style.setProperty('--panel-offset-y', clamped + 'px');
+
+  if (animate) {
+    timelinePanel.classList.remove('no-transition');
+  } else {
+    timelinePanel.classList.add('no-transition');
+  }
+}
+
+function snapSheetToState() {
+  const target = mobileSheet.state === 'collapsed' ? mobileSheet.bounds.max : 0;
+  setSheetOffset(target, true);
+}
+
+function toggleSheetState() {
+  if (!mobileSheet.enabled) return;
+  mobileSheet.state = mobileSheet.state === 'collapsed' ? 'expanded' : 'collapsed';
+  snapSheetToState();
+}
+
+function getCurrentSheetOffset() {
+  if (!timelinePanel) return 0;
+  const raw = getComputedStyle(timelinePanel).getPropertyValue('--panel-offset-y');
+  const numeric = parseFloat(raw);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function isPointerOnInteractive(evt) {
+  const target = evt.target;
+  if (!target) return false;
+  return !!target.closest('button, input, select, textarea, label, a');
 }
 
 // ---------------------------------------------------------------------------

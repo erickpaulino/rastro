@@ -17,6 +17,9 @@ require_login_html();
 
   <!-- Painel flutuante -->
   <div id="timeline-panel">
+    <div class="panel-drag-handle" id="panel-drag-handle">
+      <span class="handle-bar"></span>
+    </div>
     <div class="panel-header">
       <div class="panel-header-main">
         <div class="app-title">Rastro Timeline</div>

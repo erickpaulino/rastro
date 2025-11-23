@@ -2,19 +2,27 @@
 require __DIR__ . '/config.php';
 
 $error = null;
+$setupWarning = null;
+
+if (empty($RASTRO_USERS)) {
+    $setupWarning = 'Nenhum usuário configurado. Defina RASTRO_USERS_JSON no arquivo .env.';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $u = $_POST['username'] ?? '';
+    $u = trim($_POST['username'] ?? '');
     $p = $_POST['password'] ?? '';
 
     global $RASTRO_USERS;
 
-    if (isset($RASTRO_USERS[$u]) && $RASTRO_USERS[$u] === $p) {
+    if (!isset($RASTRO_USERS[$u])) {
+        $error = 'Usuário ou senha inválidos.';
+    } elseif (!password_verify($p, $RASTRO_USERS[$u])) {
+        $error = 'Usuário ou senha inválidos.';
+    } else {
+        session_regenerate_id(true);
         $_SESSION['rastro_user'] = $u;
         header('Location: index.php');
         exit;
-    } else {
-        $error = 'Usuário ou senha inválidos.';
     }
 }
 ?>
@@ -63,6 +71,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php if ($error): ?>
       <div class="error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
     <?php endif; ?>
+    <?php if ($setupWarning): ?>
+      <div class="error" style="color:#facc15"><?= htmlspecialchars($setupWarning, ENT_QUOTES, 'UTF-8') ?></div>
+    <?php endif; ?>
     <form method="post" autocomplete="off">
       <label for="username">Usuário</label>
       <input type="text" name="username" id="username" required>
@@ -71,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <input type="password" name="password" id="password" required>
 
       <button type="submit">Entrar</button>
-      <div class="hint">Ajuste o usuário/senha em <code>config.php</code>.</div>
+      <div class="hint">Ajuste os usuários no arquivo <code>.env</code>.</div>
     </form>
   </div>
 </body>

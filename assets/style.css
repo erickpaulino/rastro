@@ -59,11 +59,20 @@ html, body {
   z-index: 2;
 }
 
-.panel-controls input[type=date],
-.select {
+.panel-controls input[type=date] {
   flex: 1;
-  padding: 4px 6px;
+  padding: 6px 8px;
   font-size: 13px;
+  border-radius: 10px;
+  border: 1px solid #d7dce3;
+  background: #fff;
+  cursor: pointer;
+}
+
+.panel-controls input[type=date]:focus {
+  border-color: #94a3b8;
+  outline: none;
+  box-shadow: 0 0 0 1px #94a3b8;
 }
 
 .btn, .btn-sm, .btn-secondary {
@@ -112,6 +121,18 @@ html, body {
   border-left: 3px solid transparent;
   border-bottom: 1px solid #f7f7f7;
   cursor: pointer;
+}
+
+.segment-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.segment-icon {
+  font-size: 22px;
+  line-height: 1;
 }
 
 .segment-item:hover {

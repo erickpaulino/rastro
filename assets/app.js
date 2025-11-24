@@ -13,9 +13,29 @@ let placeClustersForCurrentDay = [];
 let rawSignalsData = [];
 let rawSignalsVisible = false;
 
+const MODE_PRESETS = {
+  'walking':            { label: 'A pé',               icon: '🚶', color: '#16a34a' },
+  'on_foot':            { label: 'A pé',               icon: '🚶', color: '#16a34a' },
+  'running':            { label: 'Correndo',           icon: '🏃', color: '#ea580c' },
+  'on_bicycle':         { label: 'Bicicleta',          icon: '🚴', color: '#22c55e' },
+  'in_passenger_vehicle': { label: 'Carro',            icon: '🚗', color: '#0ea5e9' },
+  'in_vehicle':         { label: 'Em veículo',         icon: '🚗', color: '#0ea5e9' },
+  'in_road_vehicle':    { label: 'Em veículo',         icon: '🚗', color: '#0ea5e9' },
+  'in_motor_vehicle':   { label: 'Em veículo',         icon: '🚗', color: '#0ea5e9' },
+  'in_bus':             { label: 'Ônibus',             icon: '🚌', color: '#f59e0b' },
+  'in_subway':          { label: 'Metrô',              icon: '🚇', color: '#8b5cf6' },
+  'in_train':           { label: 'Trem',               icon: '🚆', color: '#6366f1' },
+  'in_rail_vehicle':    { label: 'Trem',               icon: '🚆', color: '#6366f1' },
+  'in_tram':            { label: 'Bonde/VLT',          icon: '🚊', color: '#14b8a6' },
+  'in_ferry':           { label: 'Balsa',              icon: '⛴️', color: '#0ea5e9' },
+  'flying':             { label: 'Avião',              icon: '✈️', color: '#c026d3' },
+  'in_flight':          { label: 'Avião',              icon: '✈️', color: '#c026d3' },
+  'trip_memory':        { label: 'Memória de viagem',  icon: '🧳', color: '#1e1b4b' },
+  'in_motorcycle':      { label: 'Moto',               icon: '🏍️', color: '#f97316' },
+  'in_taxi':            { label: 'Táxi',               icon: '🚕', color: '#facc15' }
+};
 // Elementos de UI (IDs do index.php)
 const dayPicker       = document.getElementById('day-picker');
-const dayListSelect   = document.getElementById('day-list');
 const prevDayBtn      = document.getElementById('prev-day');
 const nextDayBtn      = document.getElementById('next-day');
 const summaryBox      = document.getElementById('summary');
@@ -64,14 +84,6 @@ function bindUI() {
     dayPicker.addEventListener('change', () => {
       if (dayPicker.value) {
         loadDay(dayPicker.value);
-      }
-    });
-  }
-
-  if (dayListSelect) {
-    dayListSelect.addEventListener('change', () => {
-      if (dayListSelect.value) {
-        loadDay(dayListSelect.value);
       }
     });
   }
@@ -312,26 +324,7 @@ async function loadDaysList() {
       console.warn('Formato inesperado de days_list.php:', raw);
     }
 
-    if (!dates.length) {
-      availableDates = [];
-      if (summaryBox) summaryBox.textContent = 'Nenhum dia importado ainda.';
-      if (dayListSelect) dayListSelect.innerHTML = '';
-      return;
-    }
-
-    // ordena ascendente
     availableDates = dates.slice().sort();
-
-    // preenche select lateral
-    if (dayListSelect) {
-      dayListSelect.innerHTML = '';
-      for (const d of availableDates) {
-        const opt = document.createElement('option');
-        opt.value = d;
-        opt.textContent = d;
-        dayListSelect.appendChild(opt);
-      }
-    }
 
     // escolhe último dia (mais recente) como padrão
     const last = availableDates[availableDates.length - 1];
@@ -354,8 +347,9 @@ async function loadDaysList() {
 
 function setCurrentDateUI(date) {
   currentDate = date;
-  if (dayPicker)     dayPicker.value = date;
-  if (dayListSelect) dayListSelect.value = date;
+  if (dayPicker) {
+    dayPicker.value = date || '';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -382,6 +376,16 @@ function shiftDay(delta) {
   loadDay(newDate);
 }
 
+function parseISODate(value) {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  return new Date(year, month, day);
+}
+
 // ---------------------------------------------------------------------------
 // Carregamento de um dia específico
 // ---------------------------------------------------------------------------
@@ -398,7 +402,6 @@ async function loadDay(date) {
       if (segmentsListBox) segmentsListBox.innerHTML = '';
       rawSignalsData = [];
       updateRawSignalsLayer();
-      setCurrentDateUI(date);
       placeClustersForCurrentDay = [];
       currentSegments = [];
       return;
@@ -411,13 +414,13 @@ async function loadDay(date) {
       .slice()
       .sort((a, b) => (a.start_ts || 0) - (b.start_ts || 0));
 
+    rawSignalsData = data.rawSignals || [];
+    updateRawSignalsLayer();
+
     // clusters de paradas para o mapa (agrupa paradas picadas)
     placeClustersForCurrentDay = buildPlaceClusters(currentSegments);
 
     renderSegments(currentSegments);
-
-    rawSignalsData = data.rawSignals || [];
-    updateRawSignalsLayer();
 
   } catch (err) {
     console.error(err);
@@ -476,7 +479,10 @@ function renderSegments(segments) {
 
     const iconSpan = document.createElement('span');
     iconSpan.className = 'segment-icon';
-    iconSpan.textContent = (kind === 'place') ? '📍' : '➡️';
+    const modeInfo = kind === 'move' ? getModeInfo(seg.mode) : null;
+    iconSpan.textContent = (kind === 'place')
+      ? '📍'
+      : (modeInfo && modeInfo.icon ? modeInfo.icon : '➡️');
 
     const titleSpan = document.createElement('span');
     titleSpan.className = 'segment-title';
@@ -486,8 +492,12 @@ function renderSegments(segments) {
       if (!label || label === 'Lugar') label = 'Parada';
       titleSpan.textContent = label;
     } else {
-      const km = (seg.distance_m || 0) / 1000;
-      titleSpan.textContent = `${km.toFixed(1)} km`;
+      if (modeInfo) {
+        titleSpan.textContent = modeInfo.label;
+      } else {
+        const km = (seg.distance_m || 0) / 1000;
+        titleSpan.textContent = `${km.toFixed(1)} km`;
+      }
     }
 
     titleRow.appendChild(iconSpan);
@@ -525,12 +535,25 @@ function renderSegments(segments) {
   // ----- Mapa: linhas de deslocamento -----
   segments.forEach(seg => {
     const kind = seg.kind || 'move';
-    if (kind === 'move' && seg.path && seg.path.length) {
-      const latlngs = seg.path.map(p => [p[0], p[1]]);
-      const line = L.polyline(latlngs, { weight: 4, opacity: 0.7 });
-      line.addTo(segmentsLayer);
-      bounds.push(...latlngs);
+    if (kind !== 'move') return;
+
+    const pathLatLngs = getSegmentPathLatLngs(seg);
+    if (!pathLatLngs || pathLatLngs.length < 2) return;
+
+    const modeInfo = getModeInfo(seg.mode);
+    const color = modeInfo ? modeInfo.color : '#1a73e8';
+    const line = L.polyline(pathLatLngs, { weight: 4, opacity: 0.85, color });
+    line.addTo(segmentsLayer);
+    if (modeInfo) {
+      const popupLines = [
+        `<strong>${modeInfo.icon ? modeInfo.icon + ' ' : ''}${modeInfo.label}</strong>`
+      ];
+      if (seg.distance_m) {
+        popupLines.push(`${(seg.distance_m / 1000).toFixed(1)} km`);
+      }
+      line.bindPopup(popupLines.join('<br>'));
     }
+    bounds.push(...pathLatLngs);
   });
 
   // ----- Mapa: um pin por cluster de parada -----
@@ -583,8 +606,11 @@ function highlightSegment(index) {
   // Fallback: vai direto pro segmento
   if (kind === 'place' && seg.lat != null && seg.lng != null) {
     map.setView([seg.lat, seg.lng], 17);
-  } else if (seg.path && seg.path.length) {
-    const latlngs = seg.path.map(p => [p[0], p[1]]);
+  } else {
+    const latlngs = getSegmentPathLatLngs(seg);
+    if (!latlngs || !latlngs.length) {
+      return;
+    }
     const b = L.latLngBounds(latlngs);
     map.fitBounds(b, { padding: [40, 40] });
   }
@@ -759,4 +785,99 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+function getModeInfo(mode) {
+  if (!mode) return null;
+  const key = String(mode).toLowerCase();
+  if (MODE_PRESETS[key]) {
+    return MODE_PRESETS[key];
+  }
+  return {
+    label: humanizeMode(key),
+    icon: '',
+    color: '#2563eb'
+  };
+}
+
+function humanizeMode(key) {
+  return key
+    .split(/[_\s]/g)
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function getSegmentPathLatLngs(seg) {
+  if (!seg) return null;
+
+  if (Array.isArray(seg.path) && seg.path.length >= 3) {
+    return seg.path.map(p => [p[0], p[1]]);
+  }
+
+  if (Array.isArray(seg._derivedPath) && seg._derivedPath.length >= 2) {
+    return seg._derivedPath;
+  }
+
+  const derived = buildPathFromRawSignalsForSegment(seg);
+  if (derived && derived.length >= 2) {
+    seg._derivedPath = derived;
+    return derived;
+  }
+
+  return null;
+}
+
+function buildPathFromRawSignalsForSegment(seg) {
+  if (!rawSignalsData || !rawSignalsData.length) return null;
+  if (!seg.start_ts || !seg.end_ts) return null;
+
+  const startWindow = seg.start_ts - 120;
+  const endWindow = seg.end_ts + 120;
+  const candidates = [];
+
+  for (let i = 0; i < rawSignalsData.length; i++) {
+    const r = rawSignalsData[i];
+    if (!r || r.kind !== 'position') continue;
+    if (r.ts == null || r.lat == null || r.lng == null) continue;
+    if (r.ts < startWindow || r.ts > endWindow) continue;
+    candidates.push([r.lat, r.lng, r.ts]);
+  }
+
+  if (candidates.length < 2) {
+    return null;
+  }
+
+  candidates.sort((a, b) => a[2] - b[2]);
+
+  const latlngs = candidates.map(p => [p[0], p[1]]);
+  return simplifyPathLatLngs(latlngs);
+}
+
+function simplifyPathLatLngs(points) {
+  if (!points || points.length < 2) return points || null;
+  const simplified = [];
+  let lastLat = null;
+  let lastLng = null;
+
+  for (let i = 0; i < points.length; i++) {
+    const lat = points[i][0];
+    const lng = points[i][1];
+    if (lastLat !== null) {
+      const diffLat = Math.abs(lat - lastLat);
+      const diffLng = Math.abs(lng - lastLng);
+      if (diffLat < 1e-5 && diffLng < 1e-5) {
+        continue;
+      }
+    }
+    simplified.push([lat, lng]);
+    lastLat = lat;
+    lastLng = lng;
+
+    if (simplified.length > 500) {
+      break;
+    }
+  }
+
+  return simplified.length >= 2 ? simplified : null;
 }

@@ -57,10 +57,10 @@ try {
         $stRawIns = $pdo->prepare("
             INSERT INTO raw_signals
             (day_id, ts, kind, uid, lat, lng, accuracy_m,
-             altitude_m, speed_mps, source, wifi_devices, source_file)
+             altitude_m, speed_mps, source, wifi_devices, source_file, raw_source)
             VALUES
             (:day_id, :ts, :kind, :uid, :lat, :lng, :accuracy_m,
-             :altitude_m, :speed_mps, :source, :wifi_devices, :source_file)
+             :altitude_m, :speed_mps, :source, :wifi_devices, :source_file, :raw_source)
         ");
     }
 
@@ -117,6 +117,16 @@ try {
                 );
             }
 
+            $rawSource = isset($seg['raw_source']) ? (string)$seg['raw_source'] : null;
+            if ($rawSource !== null && strlen($rawSource) > 20) {
+                $rawSource = substr($rawSource, 0, 20);
+            }
+
+            $sourceFile = isset($seg['source_file']) ? (string)$seg['source_file'] : null;
+            if ($sourceFile !== null && strlen($sourceFile) > 255) {
+                $sourceFile = substr($sourceFile, 0, 255);
+            }
+
             $params = [
                 ':day_id'      => $dayId,
                 ':uid'         => $uid,
@@ -132,8 +142,8 @@ try {
                 ':lat'         => isset($seg['lat']) ? (double)$seg['lat'] : null,
                 ':lng'         => isset($seg['lng']) ? (double)$seg['lng'] : null,
                 ':path_json'   => isset($seg['path']) ? json_encode($seg['path']) : null,
-                ':raw_source'  => $seg['raw_source'] ?? null,
-                ':source_file' => $seg['source_file'] ?? null,
+                ':raw_source'  => $rawSource,
+                ':source_file' => $sourceFile,
             ];
             $stSegIns->execute($params);
         }
@@ -161,6 +171,11 @@ try {
                     16
                 );
 
+                $rawSource = isset($rs['raw_source']) ? (string)$rs['raw_source'] : null;
+                if ($rawSource !== null && strlen($rawSource) > 30) {
+                    $rawSource = substr($rawSource, 0, 30);
+                }
+
                 $params = [
                     ':day_id'       => $dayId,
                     ':ts'           => $ts,
@@ -174,6 +189,7 @@ try {
                     ':source'       => $rs['source'] ?? null,
                     ':wifi_devices' => (int)($rs['wifi_devices'] ?? 0),
                     ':source_file'  => $rs['source_file'] ?? null,
+                    ':raw_source'   => $rawSource
                 ];
                 $stRawIns->execute($params);
             }

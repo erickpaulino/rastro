@@ -40,10 +40,9 @@ require_login_html();
     </div>
 
     <div class="panel-controls">
-      <button id="prev-day" class="btn-sm">◀</button>
+      <button id="prev-day" class="btn-sm" type="button">◀</button>
       <input type="date" id="day-picker">
-      <button id="next-day" class="btn-sm">▶</button>
-      <select id="day-list" class="select"></select>
+      <button id="next-day" class="btn-sm" type="button">▶</button>
     </div>
 
     <div id="summary" class="summary"></div>

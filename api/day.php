@@ -70,7 +70,7 @@ try {
     $stRaw = $pdo->prepare("
         SELECT
           ts, kind, uid, lat, lng, accuracy_m,
-          altitude_m, speed_mps, source, wifi_devices, source_file
+          altitude_m, speed_mps, source, wifi_devices, source_file, raw_source
         FROM raw_signals
         WHERE day_id = ?
         ORDER BY ts ASC, id ASC
@@ -90,6 +90,7 @@ try {
             'source'       => $row['source'],
             'wifi_devices' => $row['wifi_devices'] !== null ? (int)$row['wifi_devices'] : null,
             'source_file'  => $row['source_file'],
+            'raw_source'   => $row['raw_source'],
         ];
     }
 } catch (Throwable $e) {

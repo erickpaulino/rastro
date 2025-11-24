@@ -114,17 +114,22 @@ function handleJsonImport(text, fileName) {
 
 function normalizeGoogleTimeline(json, sourceFileName) {
   const byDay = {};
+  const placeCache = Object.create(null);
+
+  seedPlaceCacheFromProfile(json.userLocationProfile, placeCache);
 
   // 1) Novo formato de export do app
   if (Array.isArray(json.semanticSegments)) {
     console.log('Detectado formato: semanticSegments (export Timeline do app).');
-    handleSemanticSegments(json.semanticSegments, byDay, sourceFileName);
+    handleSemanticSegments(json.semanticSegments, byDay, sourceFileName, placeCache);
+    cleanupSemanticSegments(byDay);
   }
 
   if (Array.isArray(json.rawSignals)) {
     console.log('Detectado formato: rawSignals (wifi/position).');
     handleRawSignals(json.rawSignals, byDay, sourceFileName);
   }
+  cleanupRawSignals(byDay);
 
   // (Outros formatos, como timelineObjects/locations, podem ser acrescentados depois)
 
@@ -139,6 +144,82 @@ function normalizeGoogleTimeline(json, sourceFileName) {
   }
 
   return byDay;
+}
+
+function seedPlaceCacheFromProfile(profile, placeCache) {
+  if (!profile || typeof profile !== 'object') return;
+
+  if (Array.isArray(profile.frequentPlaces)) {
+    for (let i = 0; i < profile.frequentPlaces.length; i++) {
+      const place = profile.frequentPlaces[i];
+      if (!place || !place.placeId) continue;
+      const coords = parseLatLng(place.placeLocation || null);
+      if (coords) {
+        rememberPlaceLocation(placeCache, place.placeId, coords, place.label || null);
+      }
+    }
+  }
+}
+
+function preloadPlaceCacheFromSegments(semanticSegments, placeCache) {
+  if (!Array.isArray(semanticSegments)) return;
+  for (let i = 0; i < semanticSegments.length; i++) {
+    const seg = semanticSegments[i];
+    if (!seg || !seg.visit) continue;
+    const visit = seg.visit;
+    const top = visit.topCandidate || {};
+    if (!top.placeId) continue;
+    const coords = parseLatLng(top.placeLocation || null);
+    if (coords) {
+      rememberPlaceLocation(placeCache, top.placeId, coords, labelForSemanticType(top.semanticType || visit.label));
+    }
+  }
+}
+
+function cleanupSemanticSegments(byDay) {
+  const dates = Object.keys(byDay);
+  for (let i = 0; i < dates.length; i++) {
+    const dateKey = dates[i];
+    const day = byDay[dateKey];
+    if (!day || !Array.isArray(day.segments) || !day.segments.length) {
+      continue;
+    }
+
+    const timelineMoveSegs = [];
+    const primaryMoveSegs = [];
+    for (let j = 0; j < day.segments.length; j++) {
+      const seg = day.segments[j];
+      if (!seg) continue;
+      if (seg.raw_source === 'semantic.timelinePath' && seg.kind === 'move') {
+        timelineMoveSegs.push(seg);
+      } else if (seg.kind === 'move' && seg.raw_source !== 'semantic.timelinePath') {
+        primaryMoveSegs.push(seg);
+      }
+    }
+
+    if (!timelineMoveSegs.length || !primaryMoveSegs.length) {
+      continue;
+    }
+
+    day.segments = day.segments.filter(function (seg) {
+      if (!seg || seg.raw_source !== 'semantic.timelinePath' || seg.kind !== 'move') {
+        return true;
+      }
+      const overlapsMove = primaryMoveSegs.some(function (primary) {
+        return segmentsOverlap(seg, primary);
+      });
+      return !overlapsMove;
+    });
+  }
+}
+
+function segmentsOverlap(a, b) {
+  if (!a || !b) return false;
+  const startA = a.start_ts || 0;
+  const endA = a.end_ts != null ? a.end_ts : startA;
+  const startB = b.start_ts || 0;
+  const endB = b.end_ts != null ? b.end_ts : startB;
+  return startA < endB && endA > startB;
 }
 
 // ---------------------------------------------------------------------------
@@ -188,12 +269,15 @@ function parseLatLng(latlng) {
     return { lat: lat, lng: lng };
   }
 
-  if (typeof latlng === 'object' &&
-      latlng.latitudeE7 != null &&
-      latlng.longitudeE7 != null) {
-    const lat = latlng.latitudeE7 / 1e7;
-    const lng = latlng.longitudeE7 / 1e7;
-    return { lat: lat, lng: lng };
+  if (typeof latlng === 'object' && latlng) {
+    if (typeof latlng.latLng === 'string') {
+      return parseLatLng(latlng.latLng);
+    }
+    if (latlng.latitudeE7 != null && latlng.longitudeE7 != null) {
+      const lat = latlng.latitudeE7 / 1e7;
+      const lng = latlng.longitudeE7 / 1e7;
+      return { lat: lat, lng: lng };
+    }
   }
 
   return null;
@@ -260,7 +344,9 @@ function recomputeSummary(day) {
 // 1) semanticSegments -> segmentos (fallback, se não houver rawSignals suficientes)
 // ---------------------------------------------------------------------------
 
-function handleSemanticSegments(semanticSegments, byDay, sourceFileName) {
+function handleSemanticSegments(semanticSegments, byDay, sourceFileName, placeCache) {
+  preloadPlaceCacheFromSegments(semanticSegments, placeCache);
+
   for (let i = 0; i < semanticSegments.length; i++) {
     const s = semanticSegments[i];
     if (!s) continue;
@@ -273,84 +359,277 @@ function handleSemanticSegments(semanticSegments, byDay, sourceFileName) {
     const baseDateKey = tsToLocalDateKey(start_ts);
     const dayForSeg   = ensureDay(byDay, baseDateKey);
 
-    const path = [];
+    let seg = null;
 
-    // 1) Converte timelinePath em path + rawSignals sintéticos
-    if (Array.isArray(s.timelinePath)) {
-      for (let j = 0; j < s.timelinePath.length; j++) {
-        const p = s.timelinePath[j];
-        const coords = parseLatLng(p.point || p.LatLng || p.latLng || null);
-        if (!coords) continue;
-
-        path.push([coords.lat, coords.lng]);
-
-        // Cria rawSignal sintético para o toggle
-        const tsPoint = parseTimeToTs(p.time);
-        if (tsPoint) {
-          const dateKeyPoint = tsToLocalDateKey(tsPoint);
-          const dayForRaw = ensureDay(byDay, dateKeyPoint);
-
-          dayForRaw.rawSignals.push({
-            kind: 'sem_path',
-            ts: tsPoint,
-            lat: coords.lat,
-            lng: coords.lng,
-            accuracy_m: null,
-            altitude_m: null,
-            speed_mps: null,
-            source: 'semantic.timelinePath',
-            wifi_devices: null,
-            source_file: sourceFileName || null
-          });
-        }
-      }
+    if (Array.isArray(s.timelinePath) && s.timelinePath.length) {
+      seg = buildSegmentFromTimelinePath(s.timelinePath, start_ts, end_ts, duration_s, byDay, sourceFileName);
+    } else if (s.visit) {
+      seg = buildSegmentFromVisit(s.visit, start_ts, end_ts, duration_s, sourceFileName, placeCache);
+    } else if (s.activity) {
+      seg = buildSegmentFromActivity(s.activity, start_ts, end_ts, duration_s, sourceFileName);
+    } else if (s.timelineMemory) {
+      seg = buildSegmentFromTimelineMemory(s.timelineMemory, start_ts, end_ts, duration_s, sourceFileName, placeCache);
+    } else if (duration_s >= 5 * 60) {
+      seg = {
+        uid: hashUid('sem-fallback-' + start_ts + '-' + end_ts),
+        kind: 'place',
+        mode: null,
+        place_name: null,
+        address: null,
+        start_ts: start_ts,
+        end_ts: end_ts,
+        duration_s: duration_s,
+        distance_m: 0,
+        lat: null,
+        lng: null,
+        path: null,
+        raw_source: 'semanticSegments',
+        source_file: sourceFileName || null
+      };
     }
 
-    // 2) Constrói segmento (place/move) a partir desse caminho
-    let distance_m = path.length > 1 ? computePathDistance(path) : 0;
-    let kind = 'move';
-    let lat = null;
-    let lng = null;
-
-    if (!path.length) {
-      // Sem path => só vira "parada" se tiver duração mínima
-      if (duration_s >= 5 * 60) {
-        kind = 'place';
-      } else {
-        continue;
-      }
-    } else if (path.length === 1 || distance_m < 150) {
-      // Um ponto só, ou deslocamento curtíssimo => parada
-      kind = 'place';
-      lat = path[0][0];
-      lng = path[0][1];
-      distance_m = 0;
-    } else {
-      // Caminho maior => deslocamento
-      kind = 'move';
-      lat = path[0][0];
-      lng = path[0][1];
+    if (seg) {
+      dayForSeg.segments.push(seg);
     }
-
-    const seg = {
-      uid: hashUid('sem-' + start_ts + '-' + end_ts + '-' + kind),
-      kind: kind,
-      mode: null,
-      place_name: null,
-      address: null,
-      start_ts: start_ts,
-      end_ts: end_ts,
-      duration_s: duration_s,
-      distance_m: Math.round(distance_m),
-      lat: lat,
-      lng: lng,
-      path: kind === 'move' ? path : null,
-      raw_source: 'semanticSegments',
-      source_file: sourceFileName || null
-    };
-
-    dayForSeg.segments.push(seg);
   }
+}
+
+function buildSegmentFromTimelinePath(timelinePath, start_ts, end_ts, duration_s, byDay, sourceFileName) {
+  if (!Array.isArray(timelinePath) || !timelinePath.length) return null;
+
+  const path = [];
+
+  for (let j = 0; j < timelinePath.length; j++) {
+    const p = timelinePath[j];
+    const coords = parseLatLng(p.point || p.LatLng || p.latLng || p || null);
+    if (!coords) continue;
+
+    path.push([coords.lat, coords.lng]);
+
+    const tsPoint = parseTimeToTs(p.time);
+    if (tsPoint) {
+      const dateKeyPoint = tsToLocalDateKey(tsPoint);
+      const dayForRaw = ensureDay(byDay, dateKeyPoint);
+      dayForRaw.rawSignals.push({
+        kind: 'sem_path',
+        ts: tsPoint,
+        lat: coords.lat,
+        lng: coords.lng,
+        accuracy_m: null,
+        altitude_m: null,
+        speed_mps: null,
+        source: 'semantic.timelinePath',
+        wifi_devices: null,
+        source_file: sourceFileName || null,
+        raw_source: 'semantic.timelinePath'
+      });
+    }
+  }
+
+  if (!path.length) {
+    return null;
+  }
+
+  let distance_m = path.length > 1 ? computePathDistance(path) : 0;
+  let kind = 'move';
+  let lat = path[0][0];
+  let lng = path[0][1];
+
+  if (path.length === 1 || distance_m < 150) {
+    kind = 'place';
+    distance_m = 0;
+  }
+
+  return {
+    uid: hashUid('sem-path-' + start_ts + '-' + end_ts + '-' + kind),
+    kind: kind,
+    mode: null,
+    place_name: null,
+    address: null,
+    start_ts: start_ts,
+    end_ts: end_ts,
+    duration_s: duration_s,
+    distance_m: Math.round(distance_m),
+    lat: lat,
+    lng: lng,
+    path: kind === 'move' ? path : null,
+    raw_source: 'semantic.timelinePath',
+    source_file: sourceFileName || null
+  };
+}
+
+function buildSegmentFromVisit(visit, start_ts, end_ts, duration_s, sourceFileName, placeCache) {
+  if (!visit) return null;
+  if (typeof visit.hierarchyLevel === 'number' && visit.hierarchyLevel > 0) {
+    return null;
+  }
+  const top = visit.topCandidate || {};
+  let coords = null;
+  if (top.placeLocation) {
+    coords = parseLatLng(top.placeLocation);
+  }
+  if (!coords && Array.isArray(visit.otherCandidates)) {
+    for (let i = 0; i < visit.otherCandidates.length && !coords; i++) {
+      const candidate = visit.otherCandidates[i];
+      if (candidate && candidate.placeLocation) {
+        coords = parseLatLng(candidate.placeLocation);
+      }
+    }
+  }
+  if (!coords && top.placeId && placeCache[top.placeId]) {
+    coords = {
+      lat: placeCache[top.placeId].lat,
+      lng: placeCache[top.placeId].lng
+    };
+  }
+
+  const semanticType = top.semanticType || visit.label || null;
+  const placeLabel = labelForSemanticType(semanticType);
+
+  if (top.placeId && coords) {
+    rememberPlaceLocation(placeCache, top.placeId, coords, placeLabel);
+  }
+
+  return {
+    uid: hashUid('sem-visit-' + start_ts + '-' + end_ts),
+    kind: 'place',
+    mode: null,
+    place_name: placeLabel,
+    address: null,
+    start_ts: start_ts,
+    end_ts: end_ts,
+    duration_s: duration_s,
+    distance_m: 0,
+    lat: coords ? coords.lat : null,
+    lng: coords ? coords.lng : null,
+    path: null,
+    raw_source: 'semantic.visit',
+    source_file: sourceFileName || null
+  };
+}
+
+function buildSegmentFromActivity(activity, start_ts, end_ts, duration_s, sourceFileName) {
+  if (!activity) return null;
+  const startCoords = parseLatLng((activity.start && (activity.start.latLng || activity.start)) || null);
+  const endCoords   = parseLatLng((activity.end && (activity.end.latLng || activity.end)) || null);
+  if (!startCoords || !endCoords) return null;
+
+  const path = [
+    [startCoords.lat, startCoords.lng],
+    [endCoords.lat, endCoords.lng]
+  ];
+
+  let distance_m = 0;
+  if (activity.distanceMeters != null) {
+    distance_m = activity.distanceMeters;
+  } else {
+    distance_m = computePathDistance(path);
+  }
+
+  const mode = normalizeActivityMode(activity.topCandidate && activity.topCandidate.type);
+
+  return {
+    uid: hashUid('sem-activity-' + start_ts + '-' + end_ts),
+    kind: 'move',
+    mode: mode,
+    place_name: null,
+    address: null,
+    start_ts: start_ts,
+    end_ts: end_ts,
+    duration_s: duration_s,
+    distance_m: Math.round(distance_m || 0),
+    lat: startCoords.lat,
+    lng: startCoords.lng,
+    path: path,
+    raw_source: 'semantic.activity',
+    source_file: sourceFileName || null
+  };
+}
+
+function buildSegmentFromTimelineMemory(memory, start_ts, end_ts, duration_s, sourceFileName, placeCache) {
+  if (!memory || !memory.trip || !Array.isArray(memory.trip.destinations)) {
+    return null;
+  }
+
+  const coordsInfo = [];
+  for (let i = 0; i < memory.trip.destinations.length; i++) {
+    const dest = memory.trip.destinations[i];
+    const placeId = dest && dest.identifier ? dest.identifier.placeId : null;
+    if (placeId && placeCache[placeId]) {
+      coordsInfo.push({
+        lat: placeCache[placeId].lat,
+        lng: placeCache[placeId].lng,
+        label: placeCache[placeId].label || null
+      });
+    }
+  }
+
+  if (!coordsInfo.length) {
+    return null;
+  }
+
+  const coords = coordsInfo.map(info => [info.lat, info.lng]);
+
+  const distance_km = memory.trip.distanceFromOriginKms != null
+    ? memory.trip.distanceFromOriginKms
+    : (computePathDistance(coords) / 1000);
+
+  const labels = coordsInfo.map(info => info.label).filter(Boolean);
+  const labelSummary = labels.length ? labels.join(' → ') : null;
+
+  return {
+    uid: hashUid('sem-memory-' + start_ts + '-' + end_ts),
+    kind: coords.length > 1 ? 'move' : 'place',
+    mode: 'trip_memory',
+    place_name: 'Memória de viagem',
+    address: labelSummary,
+    start_ts: start_ts,
+    end_ts: end_ts,
+    duration_s: duration_s,
+    distance_m: Math.round(distance_km * 1000),
+    lat: coords[0][0],
+    lng: coords[0][1],
+    path: coords.length > 1 ? coords : null,
+    raw_source: 'semantic.timelineMemory',
+    source_file: sourceFileName || null
+  };
+}
+
+function labelForSemanticType(type) {
+  if (!type) return 'Parada';
+  const normalized = type.toUpperCase();
+  switch (normalized) {
+    case 'HOME':
+      return 'Casa';
+    case 'WORK':
+      return 'Trabalho';
+    case 'INFERRED_HOME':
+      return 'Casa (inferido)';
+    case 'INFERRED_WORK':
+      return 'Trabalho (inferido)';
+    case 'SEARCHED_ADDRESS':
+      return 'Endereço pesquisado';
+    default:
+      return 'Parada';
+  }
+}
+
+function normalizeActivityMode(type) {
+  if (!type) return null;
+  const normalized = type.toLowerCase();
+  if (normalized === 'unknown_activity_type' || normalized === 'unknown') {
+    return null;
+  }
+  return normalized;
+}
+
+function rememberPlaceLocation(cache, placeId, coords, label) {
+  if (!placeId || !coords) return;
+  cache[placeId] = {
+    lat: coords.lat,
+    lng: coords.lng,
+    label: label || null
+  };
 }
 
 
@@ -383,7 +662,8 @@ function handleRawSignals(rawSignalsArr, byDay, sourceFileName) {
         speed_mps: pos.speedMetersPerSecond != null ? pos.speedMetersPerSecond : null,
         source: pos.source || null,
         wifi_devices: null,
-        source_file: sourceFileName || null
+        source_file: sourceFileName || null,
+        raw_source: 'raw.position'
       });
     }
 
@@ -408,11 +688,38 @@ function handleRawSignals(rawSignalsArr, byDay, sourceFileName) {
         speed_mps: null,
         source: 'wifiScan',
         wifi_devices: devCount,
-        source_file: sourceFileName || null
+        source_file: sourceFileName || null,
+        raw_source: 'raw.wifi'
       });
     }
 
     // activityRecord ainda não está sendo usado, mas pode servir depois
+  }
+}
+
+function cleanupRawSignals(byDay) {
+  const dates = Object.keys(byDay);
+  for (let i = 0; i < dates.length; i++) {
+    const day = byDay[dates[i]];
+    if (!day || !Array.isArray(day.rawSignals) || !day.rawSignals.length) {
+      continue;
+    }
+
+    const hasRealPos = day.rawSignals.some(function (r) {
+      if (r.kind !== 'position') return false;
+      if (r.raw_source && r.raw_source === 'semantic.timelinePath') return false;
+      if (!r.raw_source && r.source === 'semantic.timelinePath') return false;
+      return true;
+    });
+
+    if (!hasRealPos) continue;
+
+    day.rawSignals = day.rawSignals.filter(function (r) {
+      if (r.kind === 'sem_path') return false;
+      if (r.raw_source && r.raw_source === 'semantic.timelinePath') return false;
+      if (!r.raw_source && r.source === 'semantic.timelinePath') return false;
+      return true;
+    });
   }
 }
 
@@ -441,7 +748,7 @@ function buildSegmentsFromRawSignals(byDay) {
     }
 
     const segs = deriveSegmentsFromPositions(positions);
-    if (segs.length) {
+    if (segs.length && (!Array.isArray(day.segments) || !day.segments.length)) {
       day.segments = segs;
     }
   }

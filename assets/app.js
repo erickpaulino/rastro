@@ -18,6 +18,7 @@ const MODE_PRESETS = {
   'on_foot':            { label: 'A pé',               icon: '🚶', color: '#16a34a' },
   'running':            { label: 'Correndo',           icon: '🏃', color: '#ea580c' },
   'on_bicycle':         { label: 'Bicicleta',          icon: '🚴', color: '#22c55e' },
+  'cycling':            { label: 'Bicicleta',          icon: '🚴', color: '#f97316' },
   'in_passenger_vehicle': { label: 'Carro',            icon: '🚗', color: '#0ea5e9' },
   'in_vehicle':         { label: 'Em veículo',         icon: '🚗', color: '#0ea5e9' },
   'in_road_vehicle':    { label: 'Em veículo',         icon: '🚗', color: '#0ea5e9' },

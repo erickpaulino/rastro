@@ -135,6 +135,7 @@ function normalizeGoogleTimeline(json, sourceFileName) {
 
   // 2) Construir segmentos a partir dos rawSignals.position, se houver
   buildSegmentsFromRawSignals(byDay);
+  ensurePlaceholderSegments(byDay);
 
   // 3) Recalcular resumo para todos os dias
   const dates = Object.keys(byDay);
@@ -721,6 +722,55 @@ function cleanupRawSignals(byDay) {
       return true;
     });
   }
+}
+
+function ensurePlaceholderSegments(byDay) {
+  const dates = Object.keys(byDay);
+  for (let i = 0; i < dates.length; i++) {
+    const dateKey = dates[i];
+    const day = byDay[dateKey];
+    if (!day) continue;
+
+    if (Array.isArray(day.segments) && day.segments.length) {
+      continue;
+    }
+
+    const candidate = pickRepresentativePoint(day);
+    if (!candidate) continue;
+
+    const ts = candidate.ts || parseTimeToTs(dateKey + 'T12:00:00');
+    const placeholder = {
+      uid: hashUid('placeholder-' + dateKey + '-' + ts),
+      kind: 'place',
+      place_name: candidate.place_name || 'Registro',
+      address: null,
+      start_ts: ts,
+      end_ts: ts,
+      duration_s: 0,
+      distance_m: 0,
+      lat: candidate.lat,
+      lng: candidate.lng,
+      path: null,
+      raw_source: candidate.raw_source || 'placeholder',
+      source_file: candidate.source_file || null
+    };
+
+    day.segments = [placeholder];
+  }
+}
+
+function pickRepresentativePoint(day) {
+  if (!day) return null;
+  const signals = (day.rawSignals || [])
+    .filter(r => r && r.lat != null && r.lng != null);
+
+  if (!signals.length) return null;
+
+  const positions = signals.filter(r => r.kind === 'position');
+  const pool = positions.length ? positions : signals;
+
+  pool.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  return pool[Math.floor(pool.length / 2)];
 }
 
 // ---------------------------------------------------------------------------

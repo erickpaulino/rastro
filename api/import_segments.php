@@ -100,7 +100,7 @@ try {
 
             $start_ts = (int)($seg['start_ts'] ?? 0);
             $end_ts   = (int)($seg['end_ts'] ?? 0);
-            $kind     = $seg['kind'] ?? 'move';
+            $kind     = normalize_segment_kind($seg['kind'] ?? 'move');
 
             // Garante que o uid de segmento nunca seja vazio
             $uid = $seg['uid'] ?? '';
@@ -145,7 +145,7 @@ try {
                 $rsSeq++;
 
                 $ts   = isset($rs['ts'])   ? (int)$rs['ts']   : 0;
-                $kind = $rs['kind'] ?? 'position';
+                $kind = normalize_raw_signal_kind($rs['kind'] ?? 'position');
 
                 // Ignora qualquer uid vindo do JSON e gera um novo UID globalmente único
                 $latStr = isset($rs['lat']) ? (string)$rs['lat'] : '';
@@ -188,4 +188,46 @@ try {
     }
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+}
+
+function normalize_segment_kind($kind) {
+    $value = $kind;
+    if (!is_string($value)) {
+        $value = 'move';
+    }
+
+    $normalized = strtolower(trim($value));
+    if ($normalized === 'place' || $normalized === 'move') {
+        return $normalized;
+    }
+
+    if (strpos($normalized, 'place') !== false || strpos($normalized, 'stop') !== false) {
+        return 'place';
+    }
+    if (
+        strpos($normalized, 'move') !== false ||
+        strpos($normalized, 'travel') !== false ||
+        strpos($normalized, 'activity') !== false
+    ) {
+        return 'move';
+    }
+
+    return 'move';
+}
+
+function normalize_raw_signal_kind($kind) {
+    if (!is_string($kind)) {
+        return 'position';
+    }
+
+    $normalized = strtolower(trim($kind));
+    if ($normalized === 'wifi' || $normalized === 'position') {
+        return $normalized;
+    }
+
+    if (strpos($normalized, 'wifi') !== false) {
+        return 'wifi';
+    }
+
+    return 'position';
 }

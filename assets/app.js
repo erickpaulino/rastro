@@ -12,6 +12,7 @@ let placeClustersForCurrentDay = [];
 
 let rawSignalsData = [];
 let rawSignalsVisible = false;
+let placesDataCache = null;
 
 const MODE_PRESETS = {
   'walking':            { label: 'A pé',               icon: '🚶', color: '#16a34a' },
@@ -44,6 +45,12 @@ const segmentsListBox = document.getElementById('segments-list');
 const toggleRaw       = document.getElementById('toggle-rawsignals');
 const timelinePanel   = document.getElementById('timeline-panel');
 const panelHandle     = document.getElementById('panel-drag-handle');
+const placesSummaryBox = document.getElementById('places-summary');
+const countriesListEl  = document.getElementById('places-countries');
+const statesListEl     = document.getElementById('places-states');
+const citiesListEl     = document.getElementById('places-cities');
+const refreshPlacesBtn = document.getElementById('refresh-places');
+const togglePlacesBtn  = document.getElementById('toggle-places');
 
 const mobileSheet = {
   enabled: false,
@@ -86,7 +93,11 @@ function bindUI() {
       if (dayPicker.value) {
         loadDay(dayPicker.value);
       }
+      toggleCalendarOverlay(false);
     });
+    dayPicker.addEventListener('focus', () => toggleCalendarOverlay(true));
+    dayPicker.addEventListener('click', () => toggleCalendarOverlay(true));
+    dayPicker.addEventListener('blur', () => toggleCalendarOverlay(false));
   }
 
   if (prevDayBtn) {
@@ -95,6 +106,21 @@ function bindUI() {
   if (nextDayBtn) {
     nextDayBtn.addEventListener('click', () => shiftDay(1));
   }
+
+if (refreshPlacesBtn) {
+  refreshPlacesBtn.addEventListener('click', () => {
+    placesDataCache = null;
+    loadPlacesSummary(true);
+  });
+}
+if (togglePlacesBtn && placesSummaryBox) {
+  togglePlacesBtn.addEventListener('click', () => {
+    const hidden = placesSummaryBox.classList.toggle('hidden');
+    if (!hidden && !placesDataCache) {
+      loadPlacesSummary();
+    }
+  });
+}
 
   // exposto para o import.js recarregar a lista depois de importar
   window.loadDaysList = loadDaysList;
@@ -144,6 +170,9 @@ function handleSheetBreakpointChange(evt) {
   if (!timelinePanel) return;
 
   timelinePanel.classList.toggle('mobile-sheet', isMobile);
+  if (!isMobile) {
+    timelinePanel.classList.remove('calendar-open');
+  }
 
   if (!isMobile) {
     timelinePanel.style.setProperty('--panel-offset-y', '0px');
@@ -810,6 +839,13 @@ function humanizeMode(key) {
     .join(' ');
 }
 
+function toggleCalendarOverlay(open) {
+  if (!timelinePanel || !timelinePanel.classList.contains('mobile-sheet')) {
+    return;
+  }
+  timelinePanel.classList.toggle('calendar-open', !!open);
+}
+
 function getSegmentPathLatLngs(seg) {
   if (!seg) return null;
 
@@ -893,26 +929,67 @@ function simplifyPathLatLngs(points) {
 
 function attachNeighborPlaces(path, segments, index) {
   const adjusted = path.slice();
-  const threshold = 60; // meters
+  const seg = segments[index] || null;
+  const minBridgeGap = 12; // meters
+  const maxBridgeGap = getBridgeGapLimit(seg);
 
   const prevPlace = findAdjacentPlace(segments, index, -1);
-  if (prevPlace) {
-    const dist = haversineDistance(prevPlace.lat, prevPlace.lng, adjusted[0][0], adjusted[0][1]);
-    if (dist > threshold) {
-      adjusted.unshift([prevPlace.lat, prevPlace.lng]);
-    }
-  }
+  maybeAttach(prevPlace, adjusted[0], true);
 
   const nextPlace = findAdjacentPlace(segments, index, 1);
-  if (nextPlace) {
-    const last = adjusted[adjusted.length - 1];
-    const dist = haversineDistance(nextPlace.lat, nextPlace.lng, last[0], last[1]);
-    if (dist > threshold) {
-      adjusted.push([nextPlace.lat, nextPlace.lng]);
-    }
-  }
+  maybeAttach(nextPlace, adjusted[adjusted.length - 1], false);
 
   return adjusted;
+
+  function maybeAttach(place, target, prepend) {
+    if (!place || !target) return;
+    const dist = haversineDistance(place.lat, place.lng, target[0], target[1]);
+    if (dist < minBridgeGap || dist > maxBridgeGap) {
+      return;
+    }
+    if (prepend) {
+      adjusted.unshift([place.lat, place.lng]);
+    } else {
+      adjusted.push([place.lat, place.lng]);
+    }
+  }
+}
+
+function getBridgeGapLimit(seg) {
+  const fallback = 2500;
+  if (!seg) return fallback;
+
+  const distance = typeof seg.distance_m === 'number' ? seg.distance_m : 0;
+  const mode = seg.mode ? String(seg.mode).toLowerCase() : '';
+  const modeCaps = {
+    'walking': 900,
+    'on_foot': 900,
+    'running': 1200,
+    'on_bicycle': 2000,
+    'cycling': 2600,
+    'in_passenger_vehicle': 6500,
+    'in_vehicle': 6500,
+    'in_road_vehicle': 6500,
+    'in_motor_vehicle': 6500,
+    'in_bus': 5000,
+    'in_subway': 9000,
+    'in_train': 14000,
+    'in_rail_vehicle': 14000,
+    'in_tram': 5200,
+    'in_ferry': 9000,
+    'flying': 50000,
+    'in_flight': 50000,
+    'trip_memory': 50000,
+    'in_motorcycle': 4200
+  };
+
+  const cap = modeCaps[mode] || fallback;
+  if (!distance) {
+    return cap;
+  }
+
+  const scaled = Math.max(distance * 0.8, 400);
+  return Math.min(scaled, cap);
 }
 
 function findAdjacentPlace(segments, startIndex, step) {
@@ -960,4 +1037,106 @@ function filterOutlierRawPoints(points) {
 
   kept.push(points[len - 1]);
   return kept;
+}
+
+async function loadPlacesSummary(force = false) {
+  if (!countriesListEl || !statesListEl || !citiesListEl) return;
+  if (!force && placesDataCache) {
+    renderPlacesSummary(placesDataCache);
+    return;
+  }
+
+  try {
+    if (refreshPlacesBtn) refreshPlacesBtn.disabled = true;
+    const url = 'api/places_summary.php' + (force ? '?force=1' : '');
+    const res = await fetch(url, { credentials: 'include' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    placesDataCache = data;
+    renderPlacesSummary(data);
+  } catch (err) {
+    console.error('Erro ao carregar locais visitados', err);
+  } finally {
+    if (refreshPlacesBtn) refreshPlacesBtn.disabled = false;
+  }
+}
+
+function renderPlacesSummary(summary) {
+  if (!placesSummaryBox) return;
+  renderPlacesList(countriesListEl, summary?.countries, 'Nenhum país');
+  renderPlacesList(statesListEl, summary?.states, 'Nenhum estado');
+  renderPlacesList(citiesListEl, summary?.cities, 'Nenhuma cidade');
+}
+
+function renderPlacesList(el, list, emptyLabel) {
+  if (!el) return;
+  el.innerHTML = '';
+  if (!list || !list.length) {
+    const li = document.createElement('li');
+    li.textContent = emptyLabel;
+    el.appendChild(li);
+    return;
+  }
+
+  list.forEach(item => {
+    const li = document.createElement('li');
+
+    let name = item.name || '';
+    if (item.state) {
+      name += ` (${item.state})`;
+    } else if (item.code) {
+      name += ` (${item.code})`;
+    }
+
+    const label = document.createElement('div');
+    label.className = 'places-item-label';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'places-item-name';
+    nameSpan.textContent = name;
+    label.appendChild(nameSpan);
+
+    if (item.is_home) {
+      li.classList.add('places-item-home');
+      const residenceSpan = document.createElement('span');
+      residenceSpan.className = 'places-item-residence';
+      residenceSpan.textContent = 'Residência';
+      label.appendChild(residenceSpan);
+      li.appendChild(label);
+      el.appendChild(li);
+      return;
+    }
+
+    const visitsCount = item.count || 0;
+    if (visitsCount > 0) {
+      const countSpan = document.createElement('span');
+      countSpan.className = 'places-item-count';
+      countSpan.textContent = `${visitsCount} visita${visitsCount === 1 ? '' : 's'}`;
+      label.appendChild(countSpan);
+
+      if (Array.isArray(item.visits) && item.visits.length) {
+        const linksSpan = document.createElement('span');
+        linksSpan.className = 'places-item-links';
+        item.visits.forEach(visit => {
+          const link = document.createElement('a');
+          link.href = '#';
+          link.textContent = visit.label || visit.date;
+          link.addEventListener('click', (evt) => {
+            evt.preventDefault();
+            if (visit.date) {
+              loadDay(visit.date);
+              if (placesSummaryBox) {
+                placesSummaryBox.classList.add('hidden');
+              }
+            }
+          });
+          linksSpan.appendChild(link);
+        });
+        label.appendChild(linksSpan);
+      }
+    }
+
+    li.appendChild(label);
+    el.appendChild(li);
+  });
 }

@@ -35,6 +35,7 @@ require_login_html();
 
       <div class="panel-header-actions">
         <button id="open-import" class="btn">Importar JSON</button>
+        <button id="toggle-places" class="link-btn" type="button">Locais visitados</button>
         <a href="logout.php" class="logout-link text-xs text-slate-500">Sair</a>
       </div>
     </div>
@@ -46,6 +47,29 @@ require_login_html();
     </div>
 
     <div id="summary" class="summary"></div>
+    <div id="places-summary" class="places-summary hidden">
+      <div class="places-summary-header">
+        <div>
+          <div class="places-summary-title">Locais visitados</div>
+          <div class="places-summary-note">Fontes: Natural Earth / IBGE</div>
+        </div>
+        <button id="refresh-places" class="btn-sm" type="button">Atualizar</button>
+      </div>
+      <div class="places-columns">
+        <div>
+          <h5>Países</h5>
+          <ul id="places-countries"></ul>
+        </div>
+        <div>
+          <h5>Estados (BR)</h5>
+          <ul id="places-states"></ul>
+        </div>
+        <div>
+          <h5>Cidades (BR)</h5>
+          <ul id="places-cities"></ul>
+        </div>
+      </div>
+    </div>
     <div id="segments-list" class="segments-list"></div>
   </div>
 

@@ -534,12 +534,13 @@ function renderSegments(segments) {
   segmentsListBox.appendChild(frag);
 
   // ----- Mapa: linhas de deslocamento -----
-  segments.forEach(seg => {
+  segments.forEach((seg, idx) => {
     const kind = seg.kind || 'move';
     if (kind !== 'move') return;
 
-    const pathLatLngs = getSegmentPathLatLngs(seg);
+    let pathLatLngs = getSegmentPathLatLngs(seg);
     if (!pathLatLngs || pathLatLngs.length < 2) return;
+    pathLatLngs = attachNeighborPlaces(pathLatLngs, segments, idx);
 
     const modeInfo = getModeInfo(seg.mode);
     const color = modeInfo ? modeInfo.color : '#1a73e8';
@@ -842,16 +843,23 @@ function buildPathFromRawSignalsForSegment(seg) {
     if (!r || r.kind !== 'position') continue;
     if (r.ts == null || r.lat == null || r.lng == null) continue;
     if (r.ts < startWindow || r.ts > endWindow) continue;
-    candidates.push([r.lat, r.lng, r.ts]);
+    candidates.push({
+      lat: r.lat,
+      lng: r.lng,
+      ts: r.ts,
+      source: r.source || r.kind || null,
+      accuracy: r.accuracy_m || null
+    });
   }
 
   if (candidates.length < 2) {
     return null;
   }
 
-  candidates.sort((a, b) => a[2] - b[2]);
+  candidates.sort((a, b) => (a.ts || 0) - (b.ts || 0));
 
-  const latlngs = candidates.map(p => [p[0], p[1]]);
+  const filteredPoints = filterOutlierRawPoints(candidates);
+  const latlngs = filteredPoints.map(p => [p.lat, p.lng]);
   return simplifyPathLatLngs(latlngs);
 }
 
@@ -881,4 +889,75 @@ function simplifyPathLatLngs(points) {
   }
 
   return simplified.length >= 2 ? simplified : null;
+}
+
+function attachNeighborPlaces(path, segments, index) {
+  const adjusted = path.slice();
+  const threshold = 60; // meters
+
+  const prevPlace = findAdjacentPlace(segments, index, -1);
+  if (prevPlace) {
+    const dist = haversineDistance(prevPlace.lat, prevPlace.lng, adjusted[0][0], adjusted[0][1]);
+    if (dist > threshold) {
+      adjusted.unshift([prevPlace.lat, prevPlace.lng]);
+    }
+  }
+
+  const nextPlace = findAdjacentPlace(segments, index, 1);
+  if (nextPlace) {
+    const last = adjusted[adjusted.length - 1];
+    const dist = haversineDistance(nextPlace.lat, nextPlace.lng, last[0], last[1]);
+    if (dist > threshold) {
+      adjusted.push([nextPlace.lat, nextPlace.lng]);
+    }
+  }
+
+  return adjusted;
+}
+
+function findAdjacentPlace(segments, startIndex, step) {
+  let i = startIndex + step;
+  while (i >= 0 && i < segments.length) {
+    const seg = segments[i];
+    if (seg && seg.kind === 'place' && seg.lat != null && seg.lng != null) {
+      return { lat: seg.lat, lng: seg.lng };
+    }
+    i += step;
+  }
+  return null;
+}
+
+function filterOutlierRawPoints(points) {
+  if (!points || points.length < 3) return points;
+
+  const kept = [points[0]];
+  const len = points.length;
+
+  for (let i = 1; i < len - 1; i++) {
+    const prev = kept[kept.length - 1];
+    const curr = points[i];
+    const next = points[i + 1];
+
+    const prevDist = haversineDistance(prev.lat, prev.lng, curr.lat, curr.lng);
+    const nextDist = haversineDistance(curr.lat, curr.lng, next.lat, next.lng);
+    const directDist = haversineDistance(prev.lat, prev.lng, next.lat, next.lng);
+    const accuracy = curr.accuracy || 0;
+    const accuracyThreshold = accuracy ? Math.max(accuracy * 6, 200) : 0;
+
+    const isHugeJump = prevDist > 250 && nextDist > 250;
+    const detour = (prevDist + nextDist) - directDist;
+
+    if (
+      isHugeJump &&
+      detour > 200 &&
+      (!accuracyThreshold || (prevDist > accuracyThreshold && nextDist > accuracyThreshold))
+    ) {
+      continue;
+    }
+
+    kept.push(curr);
+  }
+
+  kept.push(points[len - 1]);
+  return kept;
 }

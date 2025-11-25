@@ -123,6 +123,7 @@ function normalizeGoogleTimeline(json, sourceFileName) {
     console.log('Detectado formato: semanticSegments (export Timeline do app).');
     handleSemanticSegments(json.semanticSegments, byDay, sourceFileName, placeCache);
     cleanupSemanticSegments(byDay);
+    propagateCrossDayPlaces(byDay);
   }
 
   if (Array.isArray(json.rawSignals)) {
@@ -211,6 +212,42 @@ function cleanupSemanticSegments(byDay) {
       });
       return !overlapsMove;
     });
+  }
+}
+
+function propagateCrossDayPlaces(byDay) {
+  const dates = Object.keys(byDay);
+  for (let i = 0; i < dates.length; i++) {
+    const day = byDay[dates[i]];
+    if (!day || !Array.isArray(day.segments) || !day.segments.length) continue;
+
+    const segments = day.segments.slice();
+    for (let j = 0; j < segments.length; j++) {
+      const seg = segments[j];
+      if (!seg || seg.kind !== 'place') continue;
+
+      const startTs = seg.start_ts || 0;
+      const endTs = seg.end_ts != null ? seg.end_ts : startTs;
+      let boundary = startOfLocalDay(startTs) + 86400;
+
+      while (boundary < endTs) {
+        const carryKey = tsToLocalDateKey(boundary);
+        const chunkStart = boundary;
+        const chunkEnd = Math.min(boundary + 86400, endTs);
+
+        const carryDay = ensureDay(byDay, carryKey);
+        const clone = Object.assign({}, seg, {
+          uid: (seg.uid || 'seg') + '-carry-' + carryKey,
+          start_ts: chunkStart,
+          end_ts: chunkEnd,
+          duration_s: Math.max(0, chunkEnd - chunkStart),
+          raw_source: ((seg.raw_source || 'semanticSegments') + '.carry')
+        });
+
+        carryDay.segments.push(clone);
+        boundary += 86400;
+      }
+    }
   }
 }
 
@@ -309,6 +346,12 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+function startOfLocalDay(ts) {
+  const d = new Date((ts || 0) * 1000);
+  d.setHours(0, 0, 0, 0);
+  return Math.floor(d.getTime() / 1000);
 }
 
 function computePathDistance(path) {

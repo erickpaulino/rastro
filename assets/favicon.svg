@@ -1,0 +1,29 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="trail" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" fill="none"/>
+  <path d="M60 420 L200 180 L320 380 L452 120" fill="none" stroke="url(#trail)" stroke-width="48" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+  <g fill="#ffffff" stroke="rgba(15,23,42,0.65)" stroke-width="12">
+    <circle cx="60" cy="420" r="40"/>
+    <circle cx="200" cy="180" r="40"/>
+    <circle cx="320" cy="380" r="40"/>
+    <circle cx="452" cy="120" r="40"/>
+  </g>
+  <g fill="#0f172a">
+    <circle cx="60" cy="420" r="18"/>
+    <circle cx="200" cy="180" r="18"/>
+    <circle cx="320" cy="380" r="18"/>
+    <circle cx="452" cy="120" r="18"/>
+  </g>
+</svg>

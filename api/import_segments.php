@@ -103,19 +103,20 @@ try {
             $kind     = normalize_segment_kind($seg['kind'] ?? 'move');
 
             // Garante que o uid de segmento nunca seja vazio
-            $uid = $seg['uid'] ?? '';
-            if ($uid === '' || $uid === null) {
-                $latStr = isset($seg['lat']) ? (string)$seg['lat'] : '';
-                $lngStr = isset($seg['lng']) ? (string)$seg['lng'] : '';
-                $uid = 'sg2-' . substr(
-                    hash(
-                        'sha256',
-                        $dateStr . '-' . $start_ts . '-' . $end_ts . '-' . $kind . '-' . $latStr . '-' . $lngStr . '-' . $seq
-                    ),
-                    0,
-                    16
-                );
-            }
+            $uidSeed = [
+                $dateStr,
+                $start_ts,
+                $end_ts,
+                $kind,
+                $seg['mode'] ?? '',
+                $seg['distance_m'] ?? '',
+                $seg['duration_s'] ?? '',
+                isset($seg['lat']) ? (string)$seg['lat'] : '',
+                isset($seg['lng']) ? (string)$seg['lng'] : '',
+                $seq,
+                $seg['uid'] ?? ''
+            ];
+            $uid = 'sg2-' . substr(hash('sha256', implode('|', $uidSeed)), 0, 24);
 
             $rawSource = isset($seg['raw_source']) ? (string)$seg['raw_source'] : null;
             if ($rawSource !== null && strlen($rawSource) > 20) {

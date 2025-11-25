@@ -51,6 +51,9 @@ const statesListEl     = document.getElementById('places-states');
 const citiesListEl     = document.getElementById('places-cities');
 const refreshPlacesBtn = document.getElementById('refresh-places');
 const togglePlacesBtn  = document.getElementById('toggle-places');
+const refreshPlacesDefaultLabel = refreshPlacesBtn
+  ? (refreshPlacesBtn.textContent.trim() || 'Atualizar')
+  : 'Atualizar';
 
 const mobileSheet = {
   enabled: false,
@@ -107,20 +110,20 @@ function bindUI() {
     nextDayBtn.addEventListener('click', () => shiftDay(1));
   }
 
-if (refreshPlacesBtn) {
-  refreshPlacesBtn.addEventListener('click', () => {
-    placesDataCache = null;
-    loadPlacesSummary(true);
-  });
-}
-if (togglePlacesBtn && placesSummaryBox) {
-  togglePlacesBtn.addEventListener('click', () => {
-    const hidden = placesSummaryBox.classList.toggle('hidden');
-    if (!hidden && !placesDataCache) {
-      loadPlacesSummary();
-    }
-  });
-}
+  if (refreshPlacesBtn) {
+    refreshPlacesBtn.addEventListener('click', () => {
+      loadPlacesSummary(true);
+    });
+  }
+
+  if (togglePlacesBtn && placesSummaryBox) {
+    togglePlacesBtn.addEventListener('click', () => {
+      const hidden = placesSummaryBox.classList.toggle('hidden');
+      if (!hidden) {
+        loadPlacesSummary(false);
+      }
+    });
+  }
 
   // exposto para o import.js recarregar a lista depois de importar
   window.loadDaysList = loadDaysList;
@@ -1046,18 +1049,27 @@ async function loadPlacesSummary(force = false) {
     return;
   }
 
+  renderPlacesPlaceholder(force ? 'Gerando lista...' : 'Carregando...');
+
   try {
-    if (refreshPlacesBtn) refreshPlacesBtn.disabled = true;
-    const url = 'api/places_summary.php' + (force ? '?force=1' : '');
+    if (force) setRefreshButtonLoading(true);
+    const url = force ? 'api/places_summary.php?force=1' : 'api/places_summary.php';
     const res = await fetch(url, { credentials: 'include' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (!res.ok) {
+      if (!force && res.status === 404) {
+        renderPlacesPlaceholder('Clique em Atualizar para gerar.');
+        return;
+      }
+      throw new Error('HTTP ' + res.status);
+    }
     const data = await res.json();
     placesDataCache = data;
     renderPlacesSummary(data);
   } catch (err) {
     console.error('Erro ao carregar locais visitados', err);
+    renderPlacesPlaceholder('Erro ao carregar. Tente novamente.');
   } finally {
-    if (refreshPlacesBtn) refreshPlacesBtn.disabled = false;
+    if (force) setRefreshButtonLoading(false);
   }
 }
 
@@ -1066,6 +1078,23 @@ function renderPlacesSummary(summary) {
   renderPlacesList(countriesListEl, summary?.countries, 'Nenhum país');
   renderPlacesList(statesListEl, summary?.states, 'Nenhum estado');
   renderPlacesList(citiesListEl, summary?.cities, 'Nenhuma cidade');
+}
+
+function renderPlacesPlaceholder(message) {
+  renderPlacesList(countriesListEl, null, message);
+  renderPlacesList(statesListEl, null, message);
+  renderPlacesList(citiesListEl, null, message);
+}
+
+function setRefreshButtonLoading(isLoading) {
+  if (!refreshPlacesBtn) return;
+  if (isLoading) {
+    refreshPlacesBtn.disabled = true;
+    refreshPlacesBtn.textContent = 'Aguarde...';
+  } else {
+    refreshPlacesBtn.disabled = false;
+    refreshPlacesBtn.textContent = refreshPlacesDefaultLabel;
+  }
 }
 
 function renderPlacesList(el, list, emptyLabel) {

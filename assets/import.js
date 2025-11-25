@@ -322,13 +322,26 @@ function parseLatLng(latlng) {
 }
 
 function hashUid(str) {
-  let h = 0;
+  let h1 = 0x6a09e667 ^ str.length;
+  let h2 = 0xbb67ae85 ^ str.length;
+  let h3 = 0x3c6ef372 ^ str.length;
+  let h4 = 0xa54ff53a ^ str.length;
+
   for (let i = 0; i < str.length; i++) {
-    const chr = str.charCodeAt(i);
-    h = ((h << 5) - h) + chr;
-    h |= 0;
+    const k = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ k, 2654435761);
+    h2 = Math.imul(h2 ^ k, 1597334677);
+    h3 = Math.imul(h3 ^ k, 2246822519);
+    h4 = Math.imul(h4 ^ k, 3266489917);
   }
-  return 'h' + (h >>> 0).toString(16);
+
+  h1 = Math.imul(h1 ^ (h1 >>> 18), 2654435761);
+  h2 = Math.imul(h2 ^ (h2 >>> 18), 1597334677);
+  h3 = Math.imul(h3 ^ (h3 >>> 18), 2246822519);
+  h4 = Math.imul(h4 ^ (h4 >>> 18), 3266489917);
+
+  const toHex = (n) => (n >>> 0).toString(16).padStart(8, '0');
+  return 'h' + toHex(h1) + toHex(h2) + toHex(h3) + toHex(h4);
 }
 
 function haversineDistance(lat1, lng1, lat2, lng2) {

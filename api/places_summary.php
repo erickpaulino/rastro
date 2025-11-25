@@ -19,6 +19,9 @@ if (!$forceRefresh) {
         echo $cached;
         return;
     }
+    http_response_code(404);
+    echo json_encode(['error' => 'cache_missing']);
+    return;
 }
 
 try {
@@ -216,9 +219,10 @@ function collapseVisitDates(array $dates): array {
 
     $visits = [];
     $prevTs = null;
+    $maxGap = 6 * 86400; // até 6 dias entre idas/voltas conta como mesma viagem
     foreach ($normalized as $date) {
         $ts = strtotime($date);
-        if ($prevTs === null || ($ts - $prevTs) > 86400) {
+        if ($prevTs === null || ($ts - $prevTs) > $maxGap) {
             $visits[] = $date;
         }
         $prevTs = $ts;

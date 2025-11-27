@@ -612,7 +612,7 @@ function renderSegments(segments) {
   });
 
   if (bounds.length) {
-    map.fitBounds(bounds, { padding: [40, 40] });
+    fitMapToPoints(bounds);
   }
 }
 
@@ -633,20 +633,19 @@ function highlightSegment(index) {
   const cluster = placeClustersForCurrentDay.find(c => c.segmentIndices.includes(index));
 
   if (cluster && cluster.lat != null && cluster.lng != null) {
-    map.setView([cluster.lat, cluster.lng], 17);
+    fitMapToPoints([[cluster.lat, cluster.lng]]);
     return;
   }
 
   // Fallback: vai direto pro segmento
   if (kind === 'place' && seg.lat != null && seg.lng != null) {
-    map.setView([seg.lat, seg.lng], 17);
+    fitMapToPoints([[seg.lat, seg.lng]]);
   } else {
     const latlngs = getSegmentPathLatLngs(seg);
     if (!latlngs || !latlngs.length) {
       return;
     }
-    const b = L.latLngBounds(latlngs);
-    map.fitBounds(b, { padding: [40, 40] });
+    fitMapToPoints(latlngs);
   }
 }
 
@@ -847,6 +846,37 @@ function toggleCalendarOverlay(open) {
     return;
   }
   timelinePanel.classList.toggle('calendar-open', !!open);
+}
+
+function fitMapToPoints(points) {
+  if (!map || !points || !points.length) return;
+  const latlngs = points.map(pt => {
+    if (Array.isArray(pt)) {
+      return L.latLng(pt[0], pt[1]);
+    }
+    if (pt && pt.lat != null && pt.lng != null) {
+      return L.latLng(pt.lat, pt.lng);
+    }
+    return null;
+  }).filter(Boolean);
+
+  if (!latlngs.length) return;
+  if (latlngs.length === 1) {
+    map.setView(latlngs[0], 14);
+    return;
+  }
+
+  const bounds = L.latLngBounds(latlngs);
+  const latSpan = Math.abs(bounds.getNorth() - bounds.getSouth());
+  const lngSpan = Math.abs(bounds.getEast() - bounds.getWest());
+  const minSpan = Math.min(latSpan, lngSpan);
+
+  if (minSpan < 0.0015) {
+    const zoom = minSpan < 0.0004 ? 17 : 15;
+    map.setView(bounds.getCenter(), zoom);
+  } else {
+    map.fitBounds(bounds, { padding: [40, 40] });
+  }
 }
 
 function getSegmentPathLatLngs(seg) {

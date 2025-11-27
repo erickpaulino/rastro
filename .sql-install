@@ -7,6 +7,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS raw_signals;
 DROP TABLE IF EXISTS segments;
 DROP TABLE IF EXISTS days;
+DROP TABLE IF EXISTS password_resets;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -66,4 +67,15 @@ CREATE TABLE raw_signals (
   CONSTRAINT fk_rawsignals_day
     FOREIGN KEY (day_id) REFERENCES days (id)
     ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE password_resets (
+  id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  username    VARCHAR(190)    NOT NULL,
+  token_hash  CHAR(64)        NOT NULL,
+  expires_at  INT UNSIGNED    NOT NULL,
+  created_at  INT UNSIGNED    NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_token_hash (token_hash),
+  KEY idx_password_resets_user (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -74,7 +74,7 @@ try {
         if (empty($entry['dates'])) continue;
         $lat = $entry['lat'];
         $lng = $entry['lng'];
-        $visits = collapseVisitDates(array_keys($entry['dates']));
+        $visits = collapseVisitDates(array_keys($entry['dates']), 6);
         if (!$visits) continue;
         $isHome = !empty($entry['is_home']);
 
@@ -152,7 +152,7 @@ try {
                 'is_home'    => !empty($info['is_home']),
                 'home_label' => $info['home_label'] ?? null,
             ];
-        }),
+        }, 30),
         'states'    => finalizeVisitList($states, function ($info, $visits) {
             return [
                 'name'       => $info['name'],
@@ -162,7 +162,7 @@ try {
                 'is_home'    => !empty($info['is_home']),
                 'home_label' => $info['home_label'] ?? null,
             ];
-        }),
+        }, 10),
         'cities'    => finalizeVisitList($cities, function ($info, $visits) {
             return [
                 'name'       => $info['name'],
@@ -172,7 +172,7 @@ try {
                 'is_home'    => !empty($info['is_home']),
                 'home_label' => $info['home_label'] ?? null,
             ];
-        }),
+        }, 6),
         'sources' => [
             'countries' => 'Natural Earth v5',
             'states'    => 'IBGE / Click that Hood',
@@ -191,11 +191,11 @@ try {
     echo json_encode(['error' => 'internal_error', 'message' => $e->getMessage()]);
 }
 
-function finalizeVisitList(array $items, callable $formatter): array {
+function finalizeVisitList(array $items, callable $formatter, int $maxGapDays): array {
     if (!$items) return [];
     $result = [];
     foreach ($items as $info) {
-        $visits = collapseVisitDates($info['visits'] ?? []);
+        $visits = collapseVisitDates($info['visits'] ?? [], $maxGapDays);
         $isHome = !empty($info['is_home']);
         if (!$visits && !$isHome) continue;
         $info['is_home'] = $isHome;
@@ -207,7 +207,7 @@ function finalizeVisitList(array $items, callable $formatter): array {
     return $result;
 }
 
-function collapseVisitDates(array $dates): array {
+function collapseVisitDates(array $dates, int $maxGapDays = 6): array {
     if (!$dates) return [];
     $normalized = [];
     foreach ($dates as $d) {
@@ -219,7 +219,7 @@ function collapseVisitDates(array $dates): array {
 
     $visits = [];
     $prevTs = null;
-    $maxGap = 6 * 86400; // até 6 dias entre idas/voltas conta como mesma viagem
+    $maxGap = max(1, $maxGapDays) * 86400;
     foreach ($normalized as $date) {
         $ts = strtotime($date);
         if ($prevTs === null || ($ts - $prevTs) > $maxGap) {

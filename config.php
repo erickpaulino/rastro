@@ -1,12 +1,17 @@
 <?php
+define('RASTRO_ENV_PATH', __DIR__ . '/.env');
+
 configure_session();
-load_env(__DIR__ . '/.env');
+load_env(RASTRO_ENV_PATH);
 
 $DB_HOST = env('DB_HOST', 'localhost');
 $DB_NAME = env('DB_NAME', '');
 $DB_USER = env('DB_USER', '');
 $DB_PASS = env('DB_PASS', '');
 $RASTRO_USERS = load_rastro_users();
+$RASTRO_USER_EMAILS = load_rastro_user_emails();
+$MAIL_FROM = env('MAIL_FROM', 'no-reply@localhost');
+$APP_URL = rtrim(env('APP_URL', ''), '/');
 
 function configure_session() {
     if (session_status() === PHP_SESSION_ACTIVE) {
@@ -101,6 +106,18 @@ function load_rastro_users() {
     return $users;
 }
 
+function load_rastro_user_emails() {
+    $json = env('RASTRO_USER_EMAILS_JSON', '');
+    if (!$json) {
+        return [];
+    }
+    $emails = json_decode($json, true);
+    if (!is_array($emails)) {
+        return [];
+    }
+    return $emails;
+}
+
 function db() {
     static $pdo;
     global $DB_HOST, $DB_NAME, $DB_USER, $DB_PASS;
@@ -137,4 +154,63 @@ function require_login_api() {
         echo json_encode(['ok' => false, 'error' => 'nao_autenticado']);
         exit;
     }
+}
+
+function rastro_user_email(string $username): ?string {
+    global $RASTRO_USER_EMAILS;
+    return $RASTRO_USER_EMAILS[$username] ?? null;
+}
+
+function rastro_username_by_email(string $email): ?string {
+    global $RASTRO_USER_EMAILS;
+    if (!$email) return null;
+    foreach ($RASTRO_USER_EMAILS as $user => $addr) {
+        if (strcasecmp($addr, $email) === 0) {
+            return $user;
+        }
+    }
+    return null;
+}
+
+function rastro_set_env_value(string $key, string $value): void {
+    $path = RASTRO_ENV_PATH;
+    $lines = [];
+    if (is_file($path)) {
+        $lines = file($path, FILE_IGNORE_NEW_LINES);
+    }
+    $updated = false;
+    foreach ($lines as $idx => $line) {
+        $trimmed = ltrim($line);
+        if ($trimmed === '' || $trimmed[0] === '#' || $trimmed[0] === ';') {
+            continue;
+        }
+        if (strpos($line, $key . '=') === 0) {
+            $lines[$idx] = $key . '=' . $value;
+            $updated = true;
+            break;
+        }
+    }
+    if (!$updated) {
+        $lines[] = $key . '=' . $value;
+    }
+    file_put_contents($path, implode(PHP_EOL, $lines) . PHP_EOL);
+    $_ENV[$key] = $value;
+    putenv($key . '=' . $value);
+}
+
+function rastro_update_user_password(string $username, string $hash): void {
+    global $RASTRO_USERS;
+    $RASTRO_USERS[$username] = $hash;
+    $payload = json_encode($RASTRO_USERS, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    rastro_set_env_value('RASTRO_USERS_JSON', $payload);
+}
+
+function rastro_app_url(): string {
+    global $APP_URL;
+    if ($APP_URL) {
+        return $APP_URL;
+    }
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    return $scheme . '://' . $host;
 }

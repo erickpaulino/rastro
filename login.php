@@ -2,10 +2,19 @@
 require __DIR__ . '/config.php';
 
 $error = null;
+$info = null;
 $setupWarning = null;
 
 if (empty($RASTRO_USERS)) {
     $setupWarning = 'Nenhum usuário configurado. Defina RASTRO_USERS_JSON no arquivo .env.';
+}
+
+if (isset($_GET['reset'])) {
+    if ($_GET['reset'] === 'ok') {
+        $info = 'Senha redefinida com sucesso. Entre novamente.';
+    } elseif ($_GET['reset'] === 'sent') {
+        $info = 'Se o e-mail informado estiver cadastrado, você receberá instruções em instantes.';
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -62,7 +71,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       background:#22c55e;color:#022c22;font-weight:600;font-size:13px;cursor:pointer;
     }
     .error{color:#f97373;font-size:12px;margin-bottom:8px}
+    .info{color:#34d399;font-size:12px;margin-bottom:8px}
     .hint{font-size:11px;color:#64748b;margin-top:8px}
+    .hint a{color:#93c5fd;text-decoration:none}
+    .hint a:hover{text-decoration:underline}
   </style>
 </head>
 <body>
@@ -70,6 +82,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <h1>Rastro • Login</h1>
     <?php if ($error): ?>
       <div class="error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
+    <?php endif; ?>
+    <?php if ($info): ?>
+      <div class="info"><?= htmlspecialchars($info, ENT_QUOTES, 'UTF-8') ?></div>
     <?php endif; ?>
     <?php if ($setupWarning): ?>
       <div class="error" style="color:#facc15"><?= htmlspecialchars($setupWarning, ENT_QUOTES, 'UTF-8') ?></div>
@@ -82,7 +97,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <input type="password" name="password" id="password" required>
 
       <button type="submit">Entrar</button>
-      <div class="hint">Ajuste os usuários no arquivo <code>.env</code>.</div>
+      <div class="hint">
+        <div>Ajuste os usuários no arquivo <code>.env</code>.</div>
+        <div><a href="forgot_password.php">Esqueceu sua senha?</a></div>
+      </div>
     </form>
   </div>
 </body>

@@ -4,3 +4,5 @@
 /db_temp/
 /data/cache/
 *.log
+.build/
+rastro-installer.zip

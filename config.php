@@ -8,6 +8,18 @@ $DB_HOST = env('DB_HOST', 'localhost');
 $DB_NAME = env('DB_NAME', '');
 $DB_USER = env('DB_USER', '');
 $DB_PASS = env('DB_PASS', '');
+$APP_INSTALLED = env('APP_INSTALLED', '0') === '1';
+
+if (!defined('RASTRO_BYPASS_INSTALL_CHECK')) {
+    if (!$APP_INSTALLED && php_sapi_name() !== 'cli') {
+        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+        if (strpos($scriptName, '/install/') === false) {
+            header('Location: install/');
+            exit;
+        }
+    }
+}
+
 $RASTRO_USERS = load_rastro_users();
 $RASTRO_USER_EMAILS = load_rastro_user_emails();
 $MAIL_FROM = env('MAIL_FROM', 'no-reply@localhost');
@@ -69,6 +81,9 @@ function load_env($path) {
             $quote = $value[0];
             if (substr($value, -1) === $quote) {
                 $value = substr($value, 1, -1);
+            }
+            if ($quote === '"') {
+                $value = stripcslashes($value);
             }
         }
 

@@ -24,6 +24,11 @@ $defaults = [
 
 $data = $defaults;
 $installDescription = rastro_t('install.description', ['env' => '<code>.env</code>']);
+$languageOptions = rastro_available_languages();
+$i18nJson = json_encode(
+    rastro_client_i18n_data(),
+    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach ($data as $key => $value) {
@@ -214,10 +219,42 @@ function env_quote(string $value): string {
       color:#bbf7d0;padding:12px 14px;border-radius:12px;font-size:13px;margin-bottom:16px}
     .success a{color:#bae6fd}
     p.desc{font-size:13px;color:#cbd5f5;margin-top:0;margin-bottom:18px}
+    .language-switcher{
+      display:flex;
+      justify-content:flex-end;
+      align-items:center;
+      gap:6px;
+      font-size:11px;
+      color:#94a3b8;
+      margin-bottom:12px;
+    }
+    .language-switcher select{
+      border-radius:999px;
+      padding:2px 8px;
+      background:#020617;
+      color:#e5e7eb;
+      border:1px solid #334155;
+      cursor:pointer;
+      font-size:12px;
+    }
   </style>
+  <script>
+    window.RASTRO_I18N = <?= $i18nJson ?>;
+  </script>
+  <script src="../assets/i18n.js?v=1"></script>
 </head>
 <body>
   <div class="card">
+    <div class="language-switcher">
+      <label for="language-select"><?= htmlspecialchars(rastro_t('panel.language'), ENT_QUOTES, 'UTF-8') ?></label>
+      <select id="language-select" data-language-select>
+        <?php foreach ($languageOptions as $code => $meta): ?>
+          <option value="<?= htmlspecialchars($code, ENT_QUOTES, 'UTF-8') ?>" <?php if ($code === rastro_lang()) echo 'selected'; ?>>
+            <?= htmlspecialchars($meta['label'], ENT_QUOTES, 'UTF-8') ?>
+          </option>
+        <?php endforeach; ?>
+      </select>
+    </div>
     <h1><?= htmlspecialchars(rastro_t('install.heading'), ENT_QUOTES, 'UTF-8') ?></h1>
     <p class="desc"><?= $installDescription ?></p>
     <?php if ($success): ?>

@@ -27,11 +27,15 @@
     });
   }
 
+  const endpoint = typeof window.RASTRO_SET_LANGUAGE_URL === 'string'
+    ? window.RASTRO_SET_LANGUAGE_URL
+    : 'set_language.php';
+
   function changeLanguage(lang) {
     if (!lang || lang === state.lang) {
       return Promise.resolve();
     }
-    return fetch('set_language.php', {
+    return fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       credentials: 'same-origin',

@@ -2,6 +2,11 @@
 define('RASTRO_BYPASS_INSTALL_CHECK', true);
 require __DIR__ . '/../config.php';
 
+if (empty($_SESSION['install_lang_initialized'])) {
+    rastro_set_lang('en');
+    $_SESSION['install_lang_initialized'] = true;
+}
+
 if ($APP_INSTALLED) {
     header('Location: ../login.php');
     exit;
@@ -177,6 +182,8 @@ function env_quote(string $value): string {
   <meta charset="utf-8">
   <title><?= htmlspecialchars(rastro_t('install.title'), ENT_QUOTES, 'UTF-8') ?></title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="../assets/favicon.svg">
   <style>
     *{box-sizing:border-box}body{
       margin:0;
@@ -240,6 +247,7 @@ function env_quote(string $value): string {
   </style>
   <script>
     window.RASTRO_I18N = <?= $i18nJson ?>;
+    window.RASTRO_SET_LANGUAGE_URL = '../set_language.php';
   </script>
   <script src="../assets/i18n.js?v=1"></script>
 </head>

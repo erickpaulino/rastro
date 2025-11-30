@@ -1,4 +1,5 @@
 <?php
+define('RASTRO_BYPASS_INSTALL_CHECK', true);
 require __DIR__ . '/config.php';
 
 header('Content-Type: application/json; charset=utf-8');

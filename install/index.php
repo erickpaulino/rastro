@@ -23,6 +23,7 @@ $defaults = [
 ];
 
 $data = $defaults;
+$installDescription = rastro_t('install.description', ['env' => '<code>.env</code>']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach ($data as $key => $value) {
@@ -38,30 +39,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (perform_install($data, $errorMessage)) {
             $success = true;
         } else {
-            $errors[] = $errorMessage ?: 'Não foi possível concluir a instalação.';
+            $errors[] = $errorMessage ?: rastro_t('install.error.generic');
         }
     }
 }
 
 function validate_install_data(array $data): array {
     $errors = [];
-    if ($data['db_host'] === '') $errors[] = 'Informe o host do banco.';
-    if ($data['db_name'] === '') $errors[] = 'Informe o nome do banco.';
-    if ($data['db_user'] === '') $errors[] = 'Informe o usuário do banco.';
+    if ($data['db_host'] === '') $errors[] = rastro_t('install.validation.db_host');
+    if ($data['db_name'] === '') $errors[] = rastro_t('install.validation.db_name');
+    if ($data['db_user'] === '') $errors[] = rastro_t('install.validation.db_user');
     if (!filter_var($data['app_url'], FILTER_VALIDATE_URL)) {
-        $errors[] = 'Informe uma URL válida para o aplicativo.';
+        $errors[] = rastro_t('install.validation.app_url');
     }
     if ($data['mail_from'] === '') {
-        $errors[] = 'Informe o remetente dos e-mails.';
+        $errors[] = rastro_t('install.validation.mail_from');
     }
     if (!preg_match('/^[a-zA-Z0-9_.-]{3,}$/', $data['admin_user'])) {
-        $errors[] = 'Usuário administrador deve ter ao menos 3 caracteres (letras/números).';
+        $errors[] = rastro_t('install.validation.admin_user');
     }
     if (!filter_var($data['admin_email'], FILTER_VALIDATE_EMAIL)) {
-        $errors[] = 'Informe um e-mail válido para o administrador.';
+        $errors[] = rastro_t('install.validation.admin_email');
     }
     if (strlen($data['admin_password']) < 8) {
-        $errors[] = 'A senha do administrador deve ter ao menos 8 caracteres.';
+        $errors[] = rastro_t('install.validation.admin_password');
     }
     return $errors;
 }
@@ -70,14 +71,14 @@ function perform_install(array $data, ?string &$errorMessage): bool {
     try {
         $pdo = connect_or_create_database($data['db_host'], $data['db_name'], $data['db_user'], $data['db_pass']);
     } catch (Throwable $e) {
-        $errorMessage = 'Erro ao conectar/ criar o banco: ' . $e->getMessage();
+        $errorMessage = rastro_t('install.error.db_connection', ['message' => $e->getMessage()]);
         return false;
     }
 
     try {
         run_schema($pdo, __DIR__ . '/../.sql-install');
     } catch (Throwable $e) {
-        $errorMessage = 'Erro ao preparar o schema: ' . $e->getMessage();
+        $errorMessage = rastro_t('install.error.schema', ['message' => $e->getMessage()]);
         return false;
     }
 
@@ -96,7 +97,7 @@ function perform_install(array $data, ?string &$errorMessage): bool {
     try {
         write_env_file($envValues);
     } catch (Throwable $e) {
-        $errorMessage = 'Erro ao gravar o arquivo .env: ' . $e->getMessage();
+        $errorMessage = rastro_t('install.error.env_write', ['message' => $e->getMessage()]);
         return false;
     }
 
@@ -123,7 +124,7 @@ function connect_or_create_database(string $host, string $dbName, string $user, 
 
 function run_schema(PDO $pdo, string $path): void {
     if (!is_file($path)) {
-        throw new RuntimeException('Arquivo .sql-install não encontrado.');
+        throw new RuntimeException(rastro_t('install.error.schema_missing'));
     }
     $raw = file_get_contents($path);
     $raw = preg_replace('/--.*$/m', '', $raw);
@@ -147,7 +148,7 @@ function write_env_file(array $values): void {
         @copy($envPath, $envPath . '.backup-' . date('YmdHis'));
     }
     if (@file_put_contents($envPath, $content) === false) {
-        throw new RuntimeException('Sem permissão para escrever o arquivo .env');
+        throw new RuntimeException(rastro_t('install.error.env_permission'));
     }
     @chmod($envPath, 0640);
 }
@@ -166,10 +167,10 @@ function env_quote(string $value): string {
 }
 ?>
 <!doctype html>
-<html lang="pt-BR">
+<html lang="<?= htmlspecialchars(rastro_html_lang(), ENT_QUOTES, 'UTF-8') ?>">
 <head>
   <meta charset="utf-8">
-  <title>Instalação • Rastro Timeline</title>
+  <title><?= htmlspecialchars(rastro_t('install.title'), ENT_QUOTES, 'UTF-8') ?></title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     *{box-sizing:border-box}body{
@@ -217,14 +218,12 @@ function env_quote(string $value): string {
 </head>
 <body>
   <div class="card">
-    <h1>Instalar Rastro Timeline</h1>
-    <p class="desc">
-      Preencha os dados para configurar o banco, o usuário administrador e as informações do aplicativo.
-      O instalador criará o banco (se necessário) e gravará o arquivo <code>.env</code>.
-    </p>
+    <h1><?= htmlspecialchars(rastro_t('install.heading'), ENT_QUOTES, 'UTF-8') ?></h1>
+    <p class="desc"><?= $installDescription ?></p>
     <?php if ($success): ?>
       <div class="success">
-        Instalação concluída! <a href="../login.php">Ir para o login</a>
+        <?= htmlspecialchars(rastro_t('install.success'), ENT_QUOTES, 'UTF-8') ?>
+        <a href="../login.php"><?= htmlspecialchars(rastro_t('install.success.link'), ENT_QUOTES, 'UTF-8') ?></a>
       </div>
     <?php else: ?>
       <?php if ($errors): ?>
@@ -236,42 +235,42 @@ function env_quote(string $value): string {
       <?php endif; ?>
       <form method="post" autocomplete="off">
         <div>
-          <label for="db_host">Host do banco</label>
+          <label for="db_host"><?= htmlspecialchars(rastro_t('install.field.db_host'), ENT_QUOTES, 'UTF-8') ?></label>
           <input type="text" name="db_host" id="db_host" required value="<?= htmlspecialchars($data['db_host'], ENT_QUOTES, 'UTF-8') ?>">
         </div>
         <div>
-          <label for="db_name">Nome do banco</label>
+          <label for="db_name"><?= htmlspecialchars(rastro_t('install.field.db_name'), ENT_QUOTES, 'UTF-8') ?></label>
           <input type="text" name="db_name" id="db_name" required value="<?= htmlspecialchars($data['db_name'], ENT_QUOTES, 'UTF-8') ?>">
         </div>
         <div>
-          <label for="db_user">Usuário do banco</label>
+          <label for="db_user"><?= htmlspecialchars(rastro_t('install.field.db_user'), ENT_QUOTES, 'UTF-8') ?></label>
           <input type="text" name="db_user" id="db_user" required value="<?= htmlspecialchars($data['db_user'], ENT_QUOTES, 'UTF-8') ?>">
         </div>
         <div>
-          <label for="db_pass">Senha do banco</label>
+          <label for="db_pass"><?= htmlspecialchars(rastro_t('install.field.db_pass'), ENT_QUOTES, 'UTF-8') ?></label>
           <input type="password" name="db_pass" id="db_pass" value="<?= htmlspecialchars($data['db_pass'], ENT_QUOTES, 'UTF-8') ?>">
         </div>
         <div class="full-row">
-          <label for="app_url">URL do aplicativo</label>
+          <label for="app_url"><?= htmlspecialchars(rastro_t('install.field.app_url'), ENT_QUOTES, 'UTF-8') ?></label>
           <input type="text" name="app_url" id="app_url" required value="<?= htmlspecialchars($data['app_url'], ENT_QUOTES, 'UTF-8') ?>">
         </div>
         <div class="full-row">
-          <label for="mail_from">Remetente dos e-mails</label>
+          <label for="mail_from"><?= htmlspecialchars(rastro_t('install.field.mail_from'), ENT_QUOTES, 'UTF-8') ?></label>
           <input type="text" name="mail_from" id="mail_from" required value="<?= htmlspecialchars($data['mail_from'], ENT_QUOTES, 'UTF-8') ?>">
         </div>
         <div>
-          <label for="admin_user">Usuário administrador</label>
+          <label for="admin_user"><?= htmlspecialchars(rastro_t('install.field.admin_user'), ENT_QUOTES, 'UTF-8') ?></label>
           <input type="text" name="admin_user" id="admin_user" required value="<?= htmlspecialchars($data['admin_user'], ENT_QUOTES, 'UTF-8') ?>">
         </div>
         <div>
-          <label for="admin_email">E-mail administrador</label>
+          <label for="admin_email"><?= htmlspecialchars(rastro_t('install.field.admin_email'), ENT_QUOTES, 'UTF-8') ?></label>
           <input type="email" name="admin_email" id="admin_email" required value="<?= htmlspecialchars($data['admin_email'], ENT_QUOTES, 'UTF-8') ?>">
         </div>
         <div class="full-row">
-          <label for="admin_password">Senha do administrador</label>
+          <label for="admin_password"><?= htmlspecialchars(rastro_t('install.field.admin_password'), ENT_QUOTES, 'UTF-8') ?></label>
           <input type="password" name="admin_password" id="admin_password" required value="<?= htmlspecialchars($data['admin_password'], ENT_QUOTES, 'UTF-8') ?>">
         </div>
-        <button type="submit">Instalar</button>
+        <button type="submit"><?= htmlspecialchars(rastro_t('install.button.submit'), ENT_QUOTES, 'UTF-8') ?></button>
       </form>
     <?php endif; ?>
   </div>

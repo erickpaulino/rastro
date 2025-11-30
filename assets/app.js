@@ -14,27 +14,47 @@ let rawSignalsData = [];
 let rawSignalsVisible = false;
 let placesDataCache = null;
 
+const t = typeof window.rastroT === 'function'
+  ? window.rastroT
+  : (key => key);
+const UNIT_KM  = t('units.kilometer');
+const UNIT_H   = t('units.hour_short');
+const UNIT_MIN = t('units.minute_short');
+const PLACE_LABEL_LOOKUP = {
+  '__PLACE__': 'app.place',
+  '__HOME__': 'semantic.home',
+  '__WORK__': 'semantic.work',
+  '__INFERRED_HOME__': 'semantic.inferred_home',
+  '__INFERRED_WORK__': 'semantic.inferred_work',
+  '__SEARCHED_ADDRESS__': 'semantic.searched_address',
+  '__TRIP_MEMORY__': 'mode.trip_memory'
+};
+
+function modePreset(labelKey, icon, color) {
+  return { label: t(labelKey), icon, color };
+}
+
 const MODE_PRESETS = {
-  'walking':            { label: 'A pé',               icon: '🚶', color: '#16a34a' },
-  'on_foot':            { label: 'A pé',               icon: '🚶', color: '#16a34a' },
-  'running':            { label: 'Correndo',           icon: '🏃', color: '#ea580c' },
-  'on_bicycle':         { label: 'Bicicleta',          icon: '🚴', color: '#22c55e' },
-  'cycling':            { label: 'Bicicleta',          icon: '🚴', color: '#f97316' },
-  'in_passenger_vehicle': { label: 'Carro',            icon: '🚗', color: '#0ea5e9' },
-  'in_vehicle':         { label: 'Em veículo',         icon: '🚗', color: '#0ea5e9' },
-  'in_road_vehicle':    { label: 'Em veículo',         icon: '🚗', color: '#0ea5e9' },
-  'in_motor_vehicle':   { label: 'Em veículo',         icon: '🚗', color: '#0ea5e9' },
-  'in_bus':             { label: 'Ônibus',             icon: '🚌', color: '#f59e0b' },
-  'in_subway':          { label: 'Metrô',              icon: '🚇', color: '#8b5cf6' },
-  'in_train':           { label: 'Trem',               icon: '🚆', color: '#6366f1' },
-  'in_rail_vehicle':    { label: 'Trem',               icon: '🚆', color: '#6366f1' },
-  'in_tram':            { label: 'Bonde/VLT',          icon: '🚊', color: '#14b8a6' },
-  'in_ferry':           { label: 'Balsa',              icon: '⛴️', color: '#0ea5e9' },
-  'flying':             { label: 'Avião',              icon: '✈️', color: '#c026d3' },
-  'in_flight':          { label: 'Avião',              icon: '✈️', color: '#c026d3' },
-  'trip_memory':        { label: 'Memória de viagem',  icon: '🧳', color: '#1e1b4b' },
-  'in_motorcycle':      { label: 'Moto',               icon: '🏍️', color: '#f97316' },
-  'in_taxi':            { label: 'Táxi',               icon: '🚕', color: '#facc15' }
+  'walking': modePreset('mode.walking', '🚶', '#16a34a'),
+  'on_foot': modePreset('mode.walking', '🚶', '#16a34a'),
+  'running': modePreset('mode.running', '🏃', '#ea580c'),
+  'on_bicycle': modePreset('mode.bicycle', '🚴', '#22c55e'),
+  'cycling': modePreset('mode.bicycle', '🚴', '#f97316'),
+  'in_passenger_vehicle': modePreset('mode.car', '🚗', '#0ea5e9'),
+  'in_vehicle': modePreset('mode.vehicle', '🚗', '#0ea5e9'),
+  'in_road_vehicle': modePreset('mode.vehicle', '🚗', '#0ea5e9'),
+  'in_motor_vehicle': modePreset('mode.vehicle', '🚗', '#0ea5e9'),
+  'in_bus': modePreset('mode.bus', '🚌', '#f59e0b'),
+  'in_subway': modePreset('mode.subway', '🚇', '#8b5cf6'),
+  'in_train': modePreset('mode.train', '🚆', '#6366f1'),
+  'in_rail_vehicle': modePreset('mode.train', '🚆', '#6366f1'),
+  'in_tram': modePreset('mode.tram', '🚊', '#14b8a6'),
+  'in_ferry': modePreset('mode.ferry', '⛴️', '#0ea5e9'),
+  'flying': modePreset('mode.flight', '✈️', '#c026d3'),
+  'in_flight': modePreset('mode.flight', '✈️', '#c026d3'),
+  'trip_memory': modePreset('mode.trip_memory', '🧳', '#1e1b4b'),
+  'in_motorcycle': modePreset('mode.motorcycle', '🏍️', '#f97316'),
+  'in_taxi': modePreset('mode.taxi', '🚕', '#facc15')
 };
 // Elementos de UI (IDs do index.php)
 const dayPicker       = document.getElementById('day-picker');
@@ -52,8 +72,8 @@ const citiesListEl     = document.getElementById('places-cities');
 const refreshPlacesBtn = document.getElementById('refresh-places');
 const togglePlacesBtn  = document.getElementById('toggle-places');
 const refreshPlacesDefaultLabel = refreshPlacesBtn
-  ? (refreshPlacesBtn.textContent.trim() || 'Atualizar')
-  : 'Atualizar';
+  ? (refreshPlacesBtn.textContent.trim() || t('places.button.refresh'))
+  : t('places.button.refresh');
 
 const mobileSheet = {
   enabled: false,
@@ -373,7 +393,7 @@ async function loadDaysList() {
   } catch (err) {
     console.error(err);
     if (summaryBox) {
-      summaryBox.textContent = 'Erro ao carregar lista de dias: ' + (err.message || err);
+      summaryBox.textContent = t('app.error.days_list', { message: getErrorMessage(err) });
     }
   }
 }
@@ -431,7 +451,7 @@ async function loadDay(date) {
     const data = await res.json();
 
     if (data.error) {
-      if (summaryBox)      summaryBox.textContent = 'Nenhum dado para este dia.';
+      if (summaryBox)      summaryBox.textContent = t('app.no_data_day');
       if (segmentsListBox) segmentsListBox.innerHTML = '';
       rawSignalsData = [];
       updateRawSignalsLayer();
@@ -458,7 +478,7 @@ async function loadDay(date) {
   } catch (err) {
     console.error(err);
     if (summaryBox) {
-      summaryBox.textContent = 'Erro ao carregar dia: ' + (err.message || err);
+      summaryBox.textContent = t('app.error.load_day', { message: getErrorMessage(err) });
     }
   }
 }
@@ -475,9 +495,9 @@ function renderSummary(summary) {
   if (!summaryBox) return;
 
   summaryBox.innerHTML = `
-    <span>Distância: ${distKm.toFixed(1)} km</span>
-    <span>Tempo em movimento: ${movingH.toFixed(1)} h</span>
-    <span>Visitas: ${visits}</span>
+    <span>${t('summary.distance')}: ${distKm.toFixed(1)} ${UNIT_KM}</span>
+    <span>${t('summary.moving_time')}: ${movingH.toFixed(1)} ${UNIT_H}</span>
+    <span>${t('summary.visits')}: ${visits}</span>
   `;
 }
 
@@ -492,7 +512,10 @@ function renderSegments(segments) {
   segmentsListBox.innerHTML = '';
 
   if (!segments.length) {
-    segmentsListBox.innerHTML = '<div class="segment-item">Sem segmentos para este dia.</div>';
+    const empty = document.createElement('div');
+    empty.className = 'segment-item';
+    empty.textContent = t('app.no_segments');
+    segmentsListBox.appendChild(empty);
     return;
   }
 
@@ -521,15 +544,13 @@ function renderSegments(segments) {
     titleSpan.className = 'segment-title';
 
     if (kind === 'place') {
-      let label = seg.place_name;
-      if (!label || label === 'Lugar') label = 'Parada';
-      titleSpan.textContent = label;
+      titleSpan.textContent = localizePlaceLabel(seg.place_name);
     } else {
       if (modeInfo) {
         titleSpan.textContent = modeInfo.label;
       } else {
         const km = (seg.distance_m || 0) / 1000;
-        titleSpan.textContent = `${km.toFixed(1)} km`;
+        titleSpan.textContent = `${km.toFixed(1)} ${UNIT_KM}`;
       }
     }
 
@@ -549,7 +570,7 @@ function renderSegments(segments) {
     metaRow.className = 'segment-meta';
     const metaPieces = [];
     if (seg.duration_s) metaPieces.push(formatDuration(seg.duration_s));
-    if (seg.distance_m) metaPieces.push((seg.distance_m / 1000).toFixed(1) + ' km');
+    if (seg.distance_m) metaPieces.push((seg.distance_m / 1000).toFixed(1) + ' ' + UNIT_KM);
     metaRow.textContent = metaPieces.join(' • ');
 
     item.appendChild(titleRow);
@@ -583,7 +604,7 @@ function renderSegments(segments) {
         `<strong>${modeInfo.icon ? modeInfo.icon + ' ' : ''}${modeInfo.label}</strong>`
       ];
       if (seg.distance_m) {
-        popupLines.push(`${(seg.distance_m / 1000).toFixed(1)} km`);
+        popupLines.push(`${(seg.distance_m / 1000).toFixed(1)} ${UNIT_KM}`);
       }
       line.bindPopup(popupLines.join('<br>'));
     }
@@ -599,8 +620,7 @@ function renderSegments(segments) {
     const start = cluster.start_ts ? new Date(cluster.start_ts * 1000) : null;
     const end   = cluster.end_ts   ? new Date(cluster.end_ts   * 1000) : null;
 
-    let label = cluster.place_name || 'Parada';
-    if (!label || label === 'Lugar') label = 'Parada';
+    let label = localizePlaceLabel(cluster.place_name);
 
     let popup = '<strong>' + label + '</strong>';
     if (start && end) {
@@ -755,23 +775,23 @@ function updateRawSignalsLayer() {
       fillOpacity: 0.6
     });
 
-    const t = new Date(r.ts * 1000).toLocaleString();
+    const timestampLabel = new Date(r.ts * 1000).toLocaleString();
     const kindLabel =
       r.kind === 'wifi'
-        ? 'Wi-Fi'
+        ? t('raw.kind.wifi')
         : (r.kind === 'sem_path'
-            ? 'Ponto de trajeto (semantic)'
-            : (r.source || 'posição'));
+            ? t('raw.kind.semantic_path')
+            : (r.source || t('raw.kind.position')));
 
     let html = `<div style="font-size:11px">
       <div><strong>${kindLabel}</strong></div>
-      <div>${t}</div>`;
+      <div>${timestampLabel}</div>`;
 
     if (r.accuracy_m) {
-      html += `<div>Precisão: ~${Math.round(r.accuracy_m)} m</div>`;
+      html += `<div>${t('raw.precision', { meters: Math.round(r.accuracy_m) })}</div>`;
     }
     if (r.wifi_devices) {
-      html += `<div>APs Wi-Fi: ${r.wifi_devices}</div>`;
+      html += `<div>${t('raw.wifi_devices', { count: r.wifi_devices })}</div>`;
     }
     html += '</div>';
 
@@ -788,6 +808,36 @@ function updateRawSignalsLayer() {
 // Utils
 // ---------------------------------------------------------------------------
 
+function getErrorMessage(err) {
+  if (!err) return '';
+  if (typeof err === 'string') return err;
+  if (err && typeof err.message === 'string') return err.message;
+  try {
+    return JSON.stringify(err);
+  } catch (e) {
+    return String(err);
+  }
+}
+
+function localizePlaceLabel(label) {
+  if (label == null) {
+    return t('app.place');
+  }
+  const raw = String(label).trim();
+  if (!raw) {
+    return t('app.place');
+  }
+  const lookupKey = PLACE_LABEL_LOOKUP[raw.toUpperCase()];
+  if (lookupKey) {
+    return t(lookupKey);
+  }
+  const lower = raw.toLowerCase();
+  if (lower === 'lugar' || lower === 'parada' || lower === 'place') {
+    return t('app.place');
+  }
+  return raw;
+}
+
 function fmtTime(d) {
   const h = String(d.getHours()).padStart(2, '0');
   const m = String(d.getMinutes()).padStart(2, '0');
@@ -797,9 +847,9 @@ function fmtTime(d) {
 function formatDuration(sec) {
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
-  if (h && m) return `${h} h ${m} min`;
-  if (h) return `${h} h`;
-  return `${m} min`;
+  if (h && m) return `${h} ${UNIT_H} ${m} ${UNIT_MIN}`;
+  if (h) return `${h} ${UNIT_H}`;
+  return `${m} ${UNIT_MIN}`;
 }
 
 // Haversine em metros
@@ -1079,7 +1129,7 @@ async function loadPlacesSummary(force = false) {
     return;
   }
 
-  renderPlacesPlaceholder(force ? 'Gerando lista...' : 'Carregando...');
+  renderPlacesPlaceholder(force ? t('places.placeholder.generating') : t('places.placeholder.loading'));
 
   try {
     if (force) setRefreshButtonLoading(true);
@@ -1087,7 +1137,7 @@ async function loadPlacesSummary(force = false) {
     const res = await fetch(url, { credentials: 'include' });
     if (!res.ok) {
       if (!force && res.status === 404) {
-        renderPlacesPlaceholder('Clique em Atualizar para gerar.');
+        renderPlacesPlaceholder(t('places.placeholder.click_refresh'));
         return;
       }
       throw new Error('HTTP ' + res.status);
@@ -1096,8 +1146,8 @@ async function loadPlacesSummary(force = false) {
     placesDataCache = data;
     renderPlacesSummary(data);
   } catch (err) {
-    console.error('Erro ao carregar locais visitados', err);
-    renderPlacesPlaceholder('Erro ao carregar. Tente novamente.');
+    console.error(t('places.error.load'), err);
+    renderPlacesPlaceholder(t('places.placeholder.error'));
   } finally {
     if (force) setRefreshButtonLoading(false);
   }
@@ -1105,9 +1155,12 @@ async function loadPlacesSummary(force = false) {
 
 function renderPlacesSummary(summary) {
   if (!placesSummaryBox) return;
-  renderPlacesList(countriesListEl, summary?.countries, 'Nenhum país');
-  renderPlacesList(statesListEl, summary?.states, 'Nenhum estado');
-  renderPlacesList(citiesListEl, summary?.cities, 'Nenhuma cidade');
+  const countries = summary && Array.isArray(summary.countries) ? summary.countries : null;
+  const states = summary && Array.isArray(summary.states) ? summary.states : null;
+  const cities = summary && Array.isArray(summary.cities) ? summary.cities : null;
+  renderPlacesList(countriesListEl, countries, t('places.none.countries'));
+  renderPlacesList(statesListEl, states, t('places.none.states'));
+  renderPlacesList(citiesListEl, cities, t('places.none.cities'));
 }
 
 function renderPlacesPlaceholder(message) {
@@ -1120,7 +1173,7 @@ function setRefreshButtonLoading(isLoading) {
   if (!refreshPlacesBtn) return;
   if (isLoading) {
     refreshPlacesBtn.disabled = true;
-    refreshPlacesBtn.textContent = 'Aguarde...';
+    refreshPlacesBtn.textContent = t('places.button.loading');
   } else {
     refreshPlacesBtn.disabled = false;
     refreshPlacesBtn.textContent = refreshPlacesDefaultLabel;
@@ -1132,7 +1185,7 @@ function renderPlacesList(el, list, emptyLabel) {
   el.innerHTML = '';
   if (!list || !list.length) {
     const li = document.createElement('li');
-    li.textContent = emptyLabel;
+    li.textContent = emptyLabel || '';
     el.appendChild(li);
     return;
   }
@@ -1159,7 +1212,7 @@ function renderPlacesList(el, list, emptyLabel) {
       li.classList.add('places-item-home');
       const residenceSpan = document.createElement('span');
       residenceSpan.className = 'places-item-residence';
-      residenceSpan.textContent = 'Residência';
+      residenceSpan.textContent = t('places.residence');
       label.appendChild(residenceSpan);
       li.appendChild(label);
       el.appendChild(li);
@@ -1170,7 +1223,10 @@ function renderPlacesList(el, list, emptyLabel) {
     if (visitsCount > 0) {
       const countSpan = document.createElement('span');
       countSpan.className = 'places-item-count';
-      countSpan.textContent = `${visitsCount} visita${visitsCount === 1 ? '' : 's'}`;
+      const visitsLabel = visitsCount === 1
+        ? t('places.visit_singular', { count: visitsCount })
+        : t('places.visit_plural', { count: visitsCount });
+      countSpan.textContent = visitsLabel;
       label.appendChild(countSpan);
 
       if (Array.isArray(item.visits) && item.visits.length) {

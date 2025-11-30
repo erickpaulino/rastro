@@ -3,6 +3,7 @@ define('RASTRO_ENV_PATH', __DIR__ . '/.env');
 
 configure_session();
 load_env(RASTRO_ENV_PATH);
+require __DIR__ . '/translations.php';
 
 $DB_HOST = env('DB_HOST', 'localhost');
 $DB_NAME = env('DB_NAME', '');

@@ -1,18 +1,26 @@
 <?php
 require __DIR__ . '/config.php';
 require_login_html();
+$i18nJson = json_encode(
+    rastro_client_i18n_data(),
+    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+);
 ?>
 
 <!doctype html>
-<html lang="pt-BR">
+<html lang="<?= htmlspecialchars(rastro_html_lang(), ENT_QUOTES, 'UTF-8') ?>">
 <head>
   <meta charset="utf-8">
-  <title>Rastro Timeline</title>
+  <title><?= htmlspecialchars(rastro_t('app.title'), ENT_QUOTES, 'UTF-8') ?></title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="alternate icon" href="assets/favicon.svg">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="assets/style.css">
+  <script>
+    window.RASTRO_I18N = <?= $i18nJson ?>;
+  </script>
+  <script src="assets/i18n.js?v=1"></script>
 </head>
 <body>
   <div id="map"></div>
@@ -24,21 +32,21 @@ require_login_html();
     </div>
     <div class="panel-header">
       <div class="panel-header-main">
-        <div class="app-title">Rastro Timeline</div>
-        <div class="app-sub">Visualização do histórico do Google Maps</div>
+        <div class="app-title"><?= htmlspecialchars(rastro_t('app.title'), ENT_QUOTES, 'UTF-8') ?></div>
+        <div class="app-sub"><?= htmlspecialchars(rastro_t('app.subtitle'), ENT_QUOTES, 'UTF-8') ?></div>
 
         <div class="panel-header-toggles mt-2 text-xs text-slate-600">
           <label class="inline-flex items-center gap-1 cursor-pointer select-none">
             <input type="checkbox" id="toggle-rawsignals" class="h-3 w-3">
-            <span>Mostrar sinais brutos (rawSignals)</span>
+            <span><?= htmlspecialchars(rastro_t('toggle.rawsignals'), ENT_QUOTES, 'UTF-8') ?></span>
           </label>
         </div>
       </div>
 
       <div class="panel-header-actions">
-        <button id="open-import" class="btn">Importar JSON</button>
-        <button id="toggle-places" class="link-btn" type="button">Locais visitados</button>
-        <a href="logout.php" class="logout-link text-xs text-slate-500">Sair</a>
+        <button id="toggle-places" class="btn" type="button"><?= htmlspecialchars(rastro_t('action.toggle_places'), ENT_QUOTES, 'UTF-8') ?></button>
+        <button id="open-import" class="link-btn"><?= htmlspecialchars(rastro_t('action.import_json'), ENT_QUOTES, 'UTF-8') ?></button>
+        <a href="logout.php" class="logout-link text-xs text-slate-500"><?= htmlspecialchars(rastro_t('action.logout'), ENT_QUOTES, 'UTF-8') ?></a>
       </div>
     </div>
 
@@ -52,22 +60,22 @@ require_login_html();
     <div id="places-summary" class="places-summary hidden">
       <div class="places-summary-header">
         <div>
-          <div class="places-summary-title">Locais visitados</div>
-          <div class="places-summary-note">Fontes: Natural Earth / IBGE</div>
+          <div class="places-summary-title"><?= htmlspecialchars(rastro_t('places.summary.title'), ENT_QUOTES, 'UTF-8') ?></div>
+          <div class="places-summary-note"><?= htmlspecialchars(rastro_t('places.summary.note'), ENT_QUOTES, 'UTF-8') ?></div>
         </div>
-        <button id="refresh-places" class="btn-sm" type="button">Atualizar</button>
+        <button id="refresh-places" class="btn-sm" type="button"><?= htmlspecialchars(rastro_t('places.button.refresh'), ENT_QUOTES, 'UTF-8') ?></button>
       </div>
       <div class="places-columns">
         <div>
-          <h5>Países</h5>
+          <h5><?= htmlspecialchars(rastro_t('places.column.countries'), ENT_QUOTES, 'UTF-8') ?></h5>
           <ul id="places-countries"></ul>
         </div>
         <div>
-          <h5>Estados (BR)</h5>
+          <h5><?= htmlspecialchars(rastro_t('places.column.states'), ENT_QUOTES, 'UTF-8') ?></h5>
           <ul id="places-states"></ul>
         </div>
         <div>
-          <h5>Cidades (BR)</h5>
+          <h5><?= htmlspecialchars(rastro_t('places.column.cities'), ENT_QUOTES, 'UTF-8') ?></h5>
           <ul id="places-cities"></ul>
         </div>
       </div>
@@ -78,16 +86,13 @@ require_login_html();
   <!-- Modal leve de importação -->
   <div id="import-modal" class="modal hidden">
     <div class="modal-content">
-      <h2>Importar histórico do Google</h2>
-      <p>
-        Selecione um arquivo JSON exportado pelo Google Takeout
-        (Location History / Semantic Location History).
-      </p>
+      <h2><?= htmlspecialchars(rastro_t('import.modal.title'), ENT_QUOTES, 'UTF-8') ?></h2>
+      <p><?= htmlspecialchars(rastro_t('import.modal.description'), ENT_QUOTES, 'UTF-8') ?></p>
       <input type="file" id="file-input" accept="application/json">
       <div id="import-status" class="import-status"></div>
       <div class="modal-actions">
-        <button id="start-import" class="btn">Começar importação</button>
-        <button id="close-import" class="btn-secondary">Fechar</button>
+        <button id="start-import" class="btn"><?= htmlspecialchars(rastro_t('import.modal.start'), ENT_QUOTES, 'UTF-8') ?></button>
+        <button id="close-import" class="btn-secondary"><?= htmlspecialchars(rastro_t('import.modal.close'), ENT_QUOTES, 'UTF-8') ?></button>
       </div>
     </div>
   </div>

@@ -8,14 +8,13 @@ $showForm = true;
 $password = '';
 $passwordConfirm = '';
 $usernameForToken = null;
-
 if ($token === '') {
-    $error = 'Link inválido. Solicite uma nova redefinição.';
+    $error = rastro_t('auth.reset.error.no_token');
     $showForm = false;
 } else {
     $usernameForToken = rastro_validate_token($token);
     if (!$usernameForToken) {
-        $error = 'Link expirado ou inválido. Solicite uma nova redefinição.';
+        $error = rastro_t('auth.reset.error.expired');
         $showForm = false;
     }
 }
@@ -26,11 +25,11 @@ if ($showForm && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $passwordConfirm = $_POST['password_confirm'] ?? '';
 
     if (strlen($password) < 8) {
-        $error = 'A nova senha deve ter pelo menos 8 caracteres.';
+        $error = rastro_t('auth.reset.error.password_length');
     } elseif ($password !== $passwordConfirm) {
-        $error = 'As senhas não coincidem.';
+        $error = rastro_t('auth.reset.error.password_match');
     } elseif (!$usernameForToken) {
-        $error = 'Token inválido.';
+        $error = rastro_t('auth.reset.error.token');
     } else {
         try {
             $hash = password_hash($password, PASSWORD_DEFAULT);
@@ -40,7 +39,7 @@ if ($showForm && $_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: login.php?reset=ok');
             exit;
         } catch (Throwable $e) {
-            $error = 'Não foi possível atualizar a senha. Verifique permissões do arquivo .env.';
+            $error = rastro_t('auth.reset.error.update');
             error_log('Erro ao redefinir senha: ' . $e->getMessage());
         }
     }
@@ -65,10 +64,10 @@ function rastro_validate_token(string $token): ?string {
 }
 ?>
 <!doctype html>
-<html lang="pt-BR">
+<html lang="<?= htmlspecialchars(rastro_html_lang(), ENT_QUOTES, 'UTF-8') ?>">
 <head>
   <meta charset="utf-8">
-  <title>Definir nova senha • Rastro</title>
+  <title><?= htmlspecialchars(rastro_t('auth.reset.title'), ENT_QUOTES, 'UTF-8') ?></title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     *{box-sizing:border-box}body{
@@ -107,27 +106,27 @@ function rastro_validate_token(string $token): ?string {
 </head>
 <body>
   <div class="card">
-    <h1>Definir nova senha</h1>
+    <h1><?= htmlspecialchars(rastro_t('auth.reset.heading'), ENT_QUOTES, 'UTF-8') ?></h1>
     <?php if ($error): ?>
       <div class="error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
     <?php endif; ?>
     <?php if ($showForm && $usernameForToken): ?>
       <form method="post" autocomplete="off">
         <input type="hidden" name="token" value="<?= htmlspecialchars($token, ENT_QUOTES, 'UTF-8') ?>">
-        <label for="password">Nova senha</label>
+        <label for="password"><?= htmlspecialchars(rastro_t('auth.reset.form.password'), ENT_QUOTES, 'UTF-8') ?></label>
         <input type="password" name="password" id="password" required minlength="8">
 
-        <label for="password_confirm">Confirmar nova senha</label>
+        <label for="password_confirm"><?= htmlspecialchars(rastro_t('auth.reset.form.password_confirm'), ENT_QUOTES, 'UTF-8') ?></label>
         <input type="password" name="password_confirm" id="password_confirm" required minlength="8">
 
-        <button type="submit">Atualizar senha</button>
+        <button type="submit"><?= htmlspecialchars(rastro_t('auth.reset.submit'), ENT_QUOTES, 'UTF-8') ?></button>
       </form>
     <?php else: ?>
       <p style="font-size:13px;color:#cbd5f5;margin-top:0">
-        Este link não é válido. Solicite uma nova redefinição de senha.
+        <?= htmlspecialchars(rastro_t('auth.reset.info.invalid'), ENT_QUOTES, 'UTF-8') ?>
       </p>
     <?php endif; ?>
-    <div class="hint"><a href="login.php">Voltar ao login</a></div>
+    <div class="hint"><a href="login.php"><?= htmlspecialchars(rastro_t('auth.back_to_login'), ENT_QUOTES, 'UTF-8') ?></a></div>
   </div>
 </body>
 </html>

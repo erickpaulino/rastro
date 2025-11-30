@@ -4,12 +4,11 @@ require __DIR__ . '/config.php';
 $successMessage = null;
 $error = null;
 $emailValue = '';
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $emailValue = trim($_POST['email'] ?? '');
 
     if (!filter_var($emailValue, FILTER_VALIDATE_EMAIL)) {
-        $error = 'Informe um e-mail válido.';
+        $error = rastro_t('auth.forgot.error.invalid_email');
     } else {
         $username = rastro_username_by_email($emailValue);
         if ($username) {
@@ -19,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 rastro_send_reset_email($emailValue, $username, $link);
             }
         }
-        $successMessage = 'Se o e-mail informado estiver cadastrado, você receberá as instruções em instantes.';
+        $successMessage = rastro_t('auth.reset.notice.sent');
         $emailValue = '';
     }
 }
@@ -43,20 +42,18 @@ function rastro_create_reset_token(string $username): ?string {
 
 function rastro_send_reset_email(string $to, string $username, string $link): void {
     global $MAIL_FROM;
-    $subject = 'Rastro Timeline - Redefinição de senha';
-    $body = "Olá {$username},\n\nRecebemos um pedido para redefinir sua senha no Rastro Timeline.\n" .
-        "Clique no link abaixo para criar uma nova senha (válido por 1 hora):\n{$link}\n\n" .
-        "Se você não solicitou esta ação, ignore este e-mail.\n";
+    $subject = rastro_t('email.reset.subject');
+    $body = rastro_t('email.reset.body', ['username' => $username, 'link' => $link]);
     $headers = "From: {$MAIL_FROM}\r\n" .
         "Content-Type: text/plain; charset=UTF-8\r\n";
     @mail($to, $subject, $body, $headers);
 }
 ?>
 <!doctype html>
-<html lang="pt-BR">
+<html lang="<?= htmlspecialchars(rastro_html_lang(), ENT_QUOTES, 'UTF-8') ?>">
 <head>
   <meta charset="utf-8">
-  <title>Recuperar senha • Rastro</title>
+  <title><?= htmlspecialchars(rastro_t('auth.forgot.title'), ENT_QUOTES, 'UTF-8') ?></title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     *{box-sizing:border-box}body{
@@ -96,9 +93,9 @@ function rastro_send_reset_email(string $to, string $username, string $link): vo
 </head>
 <body>
   <div class="card">
-    <h1>Redefinir senha</h1>
+    <h1><?= htmlspecialchars(rastro_t('auth.forgot.heading'), ENT_QUOTES, 'UTF-8') ?></h1>
     <p style="font-size:13px;color:#cbd5f5;margin-top:0">
-      Informe o e-mail associado à sua conta. Vamos enviar um link para criar uma nova senha.
+      <?= htmlspecialchars(rastro_t('auth.forgot.description'), ENT_QUOTES, 'UTF-8') ?>
     </p>
     <?php if ($error): ?>
       <div class="error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
@@ -107,11 +104,11 @@ function rastro_send_reset_email(string $to, string $username, string $link): vo
       <div class="info"><?= htmlspecialchars($successMessage, ENT_QUOTES, 'UTF-8') ?></div>
     <?php endif; ?>
     <form method="post" autocomplete="off">
-      <label for="email">E-mail</label>
+      <label for="email"><?= htmlspecialchars(rastro_t('auth.forgot.email'), ENT_QUOTES, 'UTF-8') ?></label>
       <input type="email" name="email" id="email" required value="<?= htmlspecialchars($emailValue, ENT_QUOTES, 'UTF-8') ?>">
-      <button type="submit">Enviar link</button>
+      <button type="submit"><?= htmlspecialchars(rastro_t('auth.forgot.submit'), ENT_QUOTES, 'UTF-8') ?></button>
     </form>
-    <div class="hint"><a href="login.php">Voltar ao login</a></div>
+    <div class="hint"><a href="login.php"><?= htmlspecialchars(rastro_t('auth.back_to_login'), ENT_QUOTES, 'UTF-8') ?></a></div>
   </div>
 </body>
 </html>

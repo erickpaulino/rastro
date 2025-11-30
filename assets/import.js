@@ -1,6 +1,22 @@
 // assets/import.js - versão robusta (DOM carregado + semanticSegments + rawSignals)
 
+(function () {
 'use strict';
+
+const t = typeof window.rastroT === 'function'
+  ? window.rastroT
+  : (key => key);
+
+const PLACE_FALLBACK_LABELS = {
+  PLACE: '__PLACE__',
+  HOME: '__HOME__',
+  WORK: '__WORK__',
+  INFERRED_HOME: '__INFERRED_HOME__',
+  INFERRED_WORK: '__INFERRED_WORK__',
+  SEARCHED_ADDRESS: '__SEARCHED_ADDRESS__',
+  TRIP_MEMORY: '__TRIP_MEMORY__'
+};
+const PLACE_FALLBACK_SET = new Set(Object.values(PLACE_FALLBACK_LABELS));
 
 // Referências globais aos elementos de UI
 let fileInput = null;
@@ -13,6 +29,17 @@ let importStatus = null;
 function setStatus(msg) {
   if (importStatus) importStatus.textContent = msg;
   console.log('[IMPORT]', msg);
+}
+
+function getImportErrorMessage(err) {
+  if (!err) return '';
+  if (typeof err === 'string') return err;
+  if (err && typeof err.message === 'string') return err.message;
+  try {
+    return JSON.stringify(err);
+  } catch (e) {
+    return String(err);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -31,7 +58,7 @@ document.addEventListener('DOMContentLoaded', function () {
   startImportBtn.addEventListener('click', function () {
     const file = fileInput.files && fileInput.files[0];
     if (!file) {
-      alert('Escolha um arquivo JSON do Google Maps Timeline.');
+      alert(t('import.choose_file_alert'));
       return;
     }
     processFile(file);
@@ -45,7 +72,7 @@ document.addEventListener('DOMContentLoaded', function () {
 // ---------------------------------------------------------------------------
 
 function processFile(file) {
-  setStatus('Lendo arquivo "' + file.name + '"...');
+  setStatus(t('import.reading_file', { filename: file.name }));
   const reader = new FileReader();
 
   reader.onload = function (e) {
@@ -54,12 +81,12 @@ function processFile(file) {
       handleJsonImport(text, file.name);
     } catch (err) {
       console.error(err);
-      setStatus('Erro ao processar arquivo: ' + (err.message || err));
+      setStatus(t('import.process_error', { message: getImportErrorMessage(err) }));
     }
   };
 
   reader.onerror = function () {
-    setStatus('Falha ao ler o arquivo.');
+    setStatus(t('import.read_error'));
   };
 
   reader.readAsText(file);
@@ -71,12 +98,12 @@ function handleJsonImport(text, fileName) {
     json = JSON.parse(text);
   } catch (err) {
     console.error('Erro de JSON:', err);
-    setStatus('Arquivo não é um JSON válido.');
+    setStatus(t('import.invalid_json'));
     return;
   }
 
   if (!json || typeof json !== 'object') {
-    setStatus('JSON de formato inesperado (raiz não é um objeto).');
+    setStatus(t('import.unexpected_root'));
     return;
   }
 
@@ -87,14 +114,14 @@ function handleJsonImport(text, fileName) {
   const dayCount = Object.keys(byDay).length;
 
   if (!dayCount) {
-    setStatus('Nenhum dia reconhecido no arquivo (formato não suportado?).');
+    setStatus(t('import.no_days'));
     return;
   }
 
-  setStatus('Arquivo analisado. Dias detectados: ' + dayCount + '. Enviando para o servidor...');
+  setStatus(t('import.analyzed', { count: dayCount }));
   sendBatches(byDay)
     .then(function () {
-      setStatus('Importação concluída com sucesso. Dias importados: ' + dayCount + '.');
+      setStatus(t('import.success', { count: dayCount }));
       // Se o app principal expuser window.loadDaysList, recarrega a lista:
       if (typeof window.loadDaysList === 'function') {
         window.loadDaysList();
@@ -102,7 +129,7 @@ function handleJsonImport(text, fileName) {
     })
     .catch(function (err) {
       console.error(err);
-      setStatus('Erro durante o envio ao servidor: ' + (err.message || err));
+      setStatus(t('import.send_error', { message: getImportErrorMessage(err) }));
     });
 }
 
@@ -638,7 +665,7 @@ function buildSegmentFromTimelineMemory(memory, start_ts, end_ts, duration_s, so
     uid: hashUid('sem-memory-' + start_ts + '-' + end_ts),
     kind: coords.length > 1 ? 'move' : 'place',
     mode: 'trip_memory',
-    place_name: 'Memória de viagem',
+    place_name: PLACE_FALLBACK_LABELS.TRIP_MEMORY,
     address: labelSummary,
     start_ts: start_ts,
     end_ts: end_ts,
@@ -653,21 +680,21 @@ function buildSegmentFromTimelineMemory(memory, start_ts, end_ts, duration_s, so
 }
 
 function labelForSemanticType(type) {
-  if (!type) return 'Parada';
+  if (!type) return PLACE_FALLBACK_LABELS.PLACE;
   const normalized = type.toUpperCase();
   switch (normalized) {
     case 'HOME':
-      return 'Casa';
+      return PLACE_FALLBACK_LABELS.HOME;
     case 'WORK':
-      return 'Trabalho';
+      return PLACE_FALLBACK_LABELS.WORK;
     case 'INFERRED_HOME':
-      return 'Casa (inferido)';
+      return PLACE_FALLBACK_LABELS.INFERRED_HOME;
     case 'INFERRED_WORK':
-      return 'Trabalho (inferido)';
+      return PLACE_FALLBACK_LABELS.INFERRED_WORK;
     case 'SEARCHED_ADDRESS':
-      return 'Endereço pesquisado';
+      return PLACE_FALLBACK_LABELS.SEARCHED_ADDRESS;
     default:
-      return 'Parada';
+      return PLACE_FALLBACK_LABELS.PLACE;
   }
 }
 
@@ -685,8 +712,13 @@ function rememberPlaceLocation(cache, placeId, coords, label) {
   cache[placeId] = {
     lat: coords.lat,
     lng: coords.lng,
-    label: label || null
+    label: isFallbackPlaceLabel(label) ? null : (label || null)
   };
+}
+
+function isFallbackPlaceLabel(label) {
+  if (typeof label !== 'string') return false;
+  return PLACE_FALLBACK_SET.has(label);
 }
 
 
@@ -999,7 +1031,7 @@ function makePlaceSegmentFromPositions(positions, startIndex, endIndex) {
     uid: uid,
     kind: 'place',
     mode: null,
-    place_name: 'Parada',
+    place_name: PLACE_FALLBACK_LABELS.PLACE,
     address: null,
     start_ts: start_ts,
     end_ts: end_ts,
@@ -1059,3 +1091,5 @@ async function sendBatches(byDay) {
 
   setStatus('Todos os ' + totalDays + ' dias foram enviados.');
 }
+
+})();

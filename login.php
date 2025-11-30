@@ -174,10 +174,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <input type="password" name="password" id="password" required>
 
         <button type="submit"><?= htmlspecialchars(rastro_t('auth.login.submit'), ENT_QUOTES, 'UTF-8') ?></button>
-        <div class="hint">
-          <div><?= htmlspecialchars(rastro_t('auth.login.hint.users'), ENT_QUOTES, 'UTF-8') ?></div>
-          <div><a href="forgot_password.php"><?= htmlspecialchars(rastro_t('auth.login.hint.forgot'), ENT_QUOTES, 'UTF-8') ?></a></div>
-        </div>
+      <div class="hint">
+        <div><a href="forgot_password.php"><?= htmlspecialchars(rastro_t('auth.login.hint.forgot'), ENT_QUOTES, 'UTF-8') ?></a></div>
+      </div>
       </form>
     </div>
     <div class="stacked-card">

@@ -6,3 +6,5 @@
 *.log
 .build/
 rastro-installer.zip
+rastro.code-workspace
+*.code-workspace
